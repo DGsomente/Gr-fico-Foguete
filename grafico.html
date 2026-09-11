@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telemetria de Voo — Trajetória do Foguete</title>
+<style>
+  :root{
+    --bg: #0A1929;
+    --panel: #0F2137;
+    --panel-2: #132840;
+    --line: #24445E;
+    --line-soft: #1A324A;
+    --text: #EAF2F8;
+    --text-muted: #7C93A8;
+    --amber: #F2A93B;
+    --amber-dim: #7A5A22;
+    --cyan: #5EC8D8;
+    --coral: #E85C4A;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Roboto Mono", monospace;
+    --sans: -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    height: 100%;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ---------- HEADER ---------- */
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 18px 28px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  header .title-block h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: 0.2px;
+  }
+
+  header .title-block p {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  header .clock {
+    font-family: var(--mono);
+    font-size: 28px;
+    color: var(--amber);
+    font-variant-numeric: tabular-nums;
+  }
+  header .clock span {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-family: var(--sans);
+    margin-left: 6px;
+  }
+
+  /* ---------- MAIN LAYOUT ---------- */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+    padding: 20px 28px;
+  }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .chart-panel {
+    background: var(--panel);
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 420px;
+  }
+
+  #chart { width: 100%; height: 62%; flex: 1; min-height: 0; }
+  #altTimeChart { width: 100%; height: 38%; min-height: 230px; border-top: 1px solid var(--line-soft); margin-top: 10px; padding-top: 10px; }
+  .alt-time-path { fill: none; stroke: var(--cyan); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .alt-time-progress { fill: none; stroke: var(--amber); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .alt-time-marker { fill: var(--coral); }
+
+  .axis-label { fill: var(--text-muted); font-size: 12px; font-family: var(--sans); }
+  .grid-line { stroke: var(--line-soft); stroke-width: 1; }
+  .tick-label { fill: var(--text-muted); font-size: 11px; font-family: var(--mono); }
+
+  .traj-path { fill: none; stroke: var(--amber); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .marker-current { fill: var(--amber); }
+  .marker-current-ring { fill: none; stroke: var(--amber); stroke-width: 1.5; opacity: 0.5; }
+
+  .event-tick { cursor: pointer; }
+  .event-tick circle.dot { fill: var(--panel-2); stroke: var(--text-muted); stroke-width: 1.5; }
+  .event-tick.reached circle.dot { fill: var(--amber); stroke: var(--amber); }
+  .event-tick.current circle.dot { fill: var(--coral); stroke: var(--coral); }
+  .event-tick.reached.final circle.dot { fill: var(--coral); stroke: var(--coral); }
+  .event-tick text { fill: var(--text-muted); font-size: 11px; font-family: var(--sans); }
+  .event-tick.reached text, .event-tick.current text { fill: var(--text); }
+
+  /* ---------- SIDEBAR ---------- */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+    padding: 16px;
+  }
+
+  .card h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+    font-weight: 600;
+  }
+
+  .telemetry-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 16px;
+  }
+
+  .telemetry-item .val {
+    font-family: var(--mono);
+    font-size: 22px;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .telemetry-item .label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .event-card {
+    border-left: 3px solid var(--amber);
+    transition: border-color 0.2s ease;
+  }
+  .event-card.idle { border-left-color: var(--line); }
+
+  .event-card .event-name {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  .event-card .event-time {
+    font-family: var(--mono);
+    color: var(--amber);
+    font-size: 13px;
+    margin-left: 8px;
+  }
+  .event-card p.explain {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+    margin: 0 0 12px;
+  }
+  .event-card p.idle-msg {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  button.continue-btn {
+    background: var(--amber);
+    color: #1A1204;
+    border: none;
+    border-radius: 4px;
+    padding: 9px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--sans);
+  }
+  button.continue-btn:hover { filter: brightness(1.08); }
+
+  .event-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+  }
+  .event-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-muted);
+    border-left: 2px solid transparent;
+  }
+  .event-list li:hover { background: var(--panel-2); }
+  .event-list li.reached { color: var(--text); border-left-color: var(--amber); }
+  .event-list li.current { color: var(--text); border-left-color: var(--coral); background: var(--panel-2); }
+  .event-list li .t { font-family: var(--mono); font-size: 12px; }
+
+  /* ---------- TRANSPORT CONTROLS ---------- */
+  footer {
+    border-top: 1px solid var(--line-soft);
+    padding: 14px 28px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .transport-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .transport-buttons { display: flex; gap: 8px; }
+
+  .icon-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    width: 38px;
+    height: 38px;
+    border-radius: 5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+  }
+  .icon-btn:hover { background: var(--line-soft); }
+  .icon-btn.play { width: 52px; background: var(--amber); border-color: var(--amber); color: #1A1204; }
+  .icon-btn.play:hover { filter: brightness(1.08); }
+
+  .speed-group { display: flex; gap: 4px; margin-left: 6px; }
+  .speed-btn {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-muted);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .speed-btn.active { background: var(--panel-2); color: var(--amber); border-color: var(--amber-dim); }
+
+  .scrubber-row { display: flex; align-items: center; gap: 12px; }
+  .scrubber-row .t-label { font-family: var(--mono); font-size: 12px; color: var(--text-muted); width: 52px; }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    flex: 1;
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--amber);
+    cursor: pointer;
+    margin-top: -5px;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: var(--amber);
+    cursor: pointer;
+  }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ---------- IMPORTAÇÃO DE TELEMETRIA ---------- */
+  .import-card {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin: 0 28px;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+  }
+  .import-btn {
+    background: var(--amber);
+    color: #1A1204;
+    border: none;
+    border-radius: 4px;
+    padding: 9px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: var(--sans);
+  }
+  .import-btn:hover { filter: brightness(1.08); }
+  .file-name { font-size: 12px; color: var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .import-status { margin-left:auto; font-size:11px; color:var(--text-muted); font-family:var(--mono); }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>Telemetria de Voo — Apresentação de Lançamento</h1>
+    <p>Importe um CSV exportado pelo OpenRocket para carregar a trajetória</p>
+  </div>
+  <div class="clock" id="clockDisplay">0.00<span>s de voo</span></div>
+</header>
+
+<div class="import-card">
+  <button class="import-btn" id="btnImportar">Abrir lançamento (.CSV)</button>
+  <input id="fileInput" type="file" accept=".csv,text/csv" hidden>
+  <span class="file-name" id="fileName">Nenhum arquivo carregado</span>
+  <span class="import-status" id="importStatus">Aguardando arquivo</span>
+</div>
+
+<main>
+  <div class="chart-panel">
+    <svg id="chart" viewBox="0 0 900 560" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg id="altTimeChart" viewBox="0 0 900 300" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+
+  <div class="sidebar">
+    <div class="card">
+      <h2>Telemetria atual</h2>
+      <div class="telemetry-grid">
+        <div class="telemetry-item">
+          <div class="val" id="tAltitude">0.0</div>
+          <div class="label">Altitude (m)</div>
+        </div>
+        <div class="telemetry-item">
+          <div class="val" id="tDistancia">0.0</div>
+          <div class="label">Distância lateral (m)</div>
+        </div>
+        <div class="telemetry-item">
+          <div class="val" id="tVelocidade">0.0</div>
+          <div class="label">Velocidade vertical (m/s)</div>
+        </div>
+        <div class="telemetry-item">
+          <div class="val" id="tAceleracao">0.0</div>
+          <div class="label">Aceleração vertical (m/s²)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card event-card idle" id="eventCard">
+      <h2>Evento</h2>
+      <p class="idle-msg" id="eventIdleMsg">Aguardando início do voo — dê play para começar.</p>
+    </div>
+
+    <div class="card" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+      <h2>Linha do tempo de eventos</h2>
+      <ul class="event-list" id="eventList"></ul>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="transport-row">
+    <div class="transport-buttons">
+      <button class="icon-btn" id="btnRestart" title="Reiniciar (R)">⟲</button>
+      <button class="icon-btn" id="btnPrevEvent" title="Evento anterior (←)">⏮</button>
+      <button class="icon-btn play" id="btnPlay" title="Play/Pausa (Espaço)">▶</button>
+      <button class="icon-btn" id="btnNextEvent" title="Próximo evento (→)">⏭</button>
+    </div>
+    <div class="speed-group" id="speedGroup">
+      <button class="speed-btn" data-speed="0.5">0.5x</button>
+      <button class="speed-btn active" data-speed="1">1x</button>
+      <button class="speed-btn" data-speed="2">2x</button>
+      <button class="speed-btn" data-speed="4">4x</button>
+    </div>
+    <span class="hint">espaço = play/pausa · ← → = navegar entre eventos</span>
+  </div>
+  <div class="scrubber-row">
+    <span class="t-label" id="scrubTimeLabel">0.0s</span>
+    <input type="range" id="scrubber" min="0" max="1000" value="0">
+    <span class="t-label" id="scrubTotalLabel">0.0s</span>
+  </div>
+</footer>
+
+<script>
+/* =================================================================
+   IMPORTAÇÃO DE TELEMETRIA
+   Aceita diretamente o CSV exportado pelo OpenRocket, incluindo:
+   - linhas de comentário antes do cabeçalho;
+   - NaN;
+   - nomes de colunas em português;
+   - linhas "# Event ... occurred at t=... seconds".
+================================================================= */
+let PONTOS = [{t:0, alt:0, dist:0, vv:0, av:0}];
+let EVENTOS = [];
+let TMAX = 1;
+let ALT_MAX = 1;
+let DIST_MAX = 1;
+
+const svg = document.getElementById('chart');
+const altTimeSvg = document.getElementById('altTimeChart');
+const NS = 'http://www.w3.org/2000/svg';
+
+const MARGIN = { top: 20, right: 30, bottom: 46, left: 60 };
+const W = 900, H = 560;
+const plotW = W - MARGIN.left - MARGIN.right;
+const plotH = H - MARGIN.top - MARGIN.bottom;
+
+const AT_W = 900, AT_H = 300;
+const AT_MARGIN = { top: 24, right: 30, bottom: 42, left: 60 };
+const AT_plotW = AT_W - AT_MARGIN.left - AT_MARGIN.right;
+const AT_plotH = AT_H - AT_MARGIN.top - AT_MARGIN.bottom;
+
+let AT_ALT_MAX = 1;
+let gridLayer = null;
+let atGrid = null;
+let trajPath = null;
+let markerRing = null;
+let markerDot = null;
+let altTimePath = null;
+let altTimeProgress = null;
+let altTimeMarker = null;
+let eventTickEls = {};
+let eventListItems = {};
+
+function sx(dist) { return MARGIN.left + (dist / DIST_MAX) * plotW; }
+function sy(alt) { return MARGIN.top + plotH - (alt / ALT_MAX) * plotH; }
+function atx(t) { return AT_MARGIN.left + (t / TMAX) * AT_plotW; }
+function aty(alt) { return AT_MARGIN.top + AT_plotH - (alt / AT_ALT_MAX) * AT_plotH; }
+
+function niceStep(maxVal, targetCount) {
+  const safe = Math.max(maxVal, 1e-9);
+  const raw = safe / targetCount;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  let step;
+  if (norm < 1.5) step = 1;
+  else if (norm < 3) step = 2;
+  else if (norm < 7) step = 5;
+  else step = 10;
+  return step * mag;
+}
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function pointAtTime(t) {
+  if (t <= PONTOS[0].t) return PONTOS[0];
+  if (t >= PONTOS[PONTOS.length - 1].t) return PONTOS[PONTOS.length - 1];
+
+  let lo = 0, hi = PONTOS.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (PONTOS[mid].t <= t) lo = mid;
+    else hi = mid;
+  }
+
+  const a = PONTOS[lo], b = PONTOS[hi];
+  const f = (t - a.t) / (b.t - a.t || 1);
+  return {
+    t,
+    alt: a.alt + (b.alt - a.alt) * f,
+    dist: a.dist + (b.dist - a.dist) * f,
+    vv: a.vv + (b.vv - a.vv) * f,
+    av: a.av + (b.av - a.av) * f
+  };
+}
+
+function normalizeText(s) {
+  return String(s ?? '')
+    .replace(/\u200b/g, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function parseNumber(v) {
+  if (v == null) return NaN;
+  const s = String(v).trim().replace(/^"|"$/g, '');
+  if (!s || /^nan$/i.test(s)) return NaN;
+  return Number(s.replace(',', '.'));
+}
+
+function findColumn(headers, patterns) {
+  const normalized = headers.map(normalizeText);
+  for (const pattern of patterns) {
+    const p = normalizeText(pattern);
+    const idx = normalized.findIndex(h => h === p);
+    if (idx !== -1) return idx;
+  }
+  for (const pattern of patterns) {
+    const p = normalizeText(pattern);
+    const idx = normalized.findIndex(h => h.includes(p));
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+const EVENT_NAMES = {
+  IGNITION: ['Ignição', 'Ignição do motor'],
+  LAUNCH: ['Lançamento'],
+  LIFTOFF: ['Decolagem'],
+  LAUNCHROD: ['Saída da haste'],
+  BURNOUT: ['Fim da queima'],
+  EJECTION_CHARGE: ['Carga de ejeção'],
+  RECOVERY_DEVICE_DEPLOYMENT: ['Abertura do paraquedas'],
+  APOGEE: ['Apogeu'],
+  GROUND_HIT: ['Pouso'],
+  SIMULATION_END: ['Fim da simulação']
+};
+
+const EVENT_EXPLANATIONS = {
+  IGNITION: 'O sistema de ignição inicia a queima do motor.',
+  LAUNCH: 'Início do lançamento registrado na simulação.',
+  LIFTOFF: 'O foguete deixa a plataforma e inicia o voo livre.',
+  LAUNCHROD: 'O foguete deixa a haste ou trilho de lançamento.',
+  BURNOUT: 'O propelente se esgota e o motor deixa de produzir empuxo.',
+  EJECTION_CHARGE: 'A carga de ejeção do sistema de recuperação é acionada.',
+  RECOVERY_DEVICE_DEPLOYMENT: 'O dispositivo de recuperação é acionado e inicia a desaceleração.',
+  APOGEE: 'Ponto de altitude máxima; a velocidade vertical passa por zero.',
+  GROUND_HIT: 'O foguete toca o solo, encerrando o voo.',
+  SIMULATION_END: 'Fim do intervalo registrado na simulação.'
+};
+
+function parseEvents(text) {
+  const events = [];
+  const re = /^\s*#\s*Event\s+([A-Za-z0-9_]+)\s+occurred\s+at\s+t\s*=\s*([-+0-9.eE]+)\s+seconds\s*$/i;
+  const seen = new Set();
+
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(re);
+    if (!m) continue;
+
+    const id = m[1].toUpperCase();
+    const t = Number(m[2]);
+    if (!Number.isFinite(t)) continue;
+
+    // LAUNCH e LIFTOFF podem coincidir; ambos são mantidos porque
+    // representam eventos distintos no arquivo exportado.
+    const key = `${id}@${t}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const nome = EVENT_NAMES[id]?.[0] || id.replace(/_/g, ' ');
+    events.push({
+      id,
+      nome,
+      t,
+      explicacao: EVENT_EXPLANATIONS[id] || `Evento ${nome} registrado pelo arquivo de telemetria.`
+    });
+  }
+
+  events.sort((a,b) => a.t - b.t);
+  return events;
+}
+
+function parseOpenRocketCSV(text) {
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+
+  let headerLine = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*#.*\b(Tempo|Time)\b.*,/i.test(lines[i]) && /Altitude\s*\(m\)/i.test(lines[i])) {
+      headerLine = i;
+      break;
+    }
+  }
+
+  if (headerLine === -1) {
+    // fallback: primeiro comentário que contenha Tempo (s)
+    headerLine = lines.findIndex(l => /Tempo\s*\(s\)/i.test(l));
+  }
+
+  if (headerLine === -1) {
+    throw new Error('Cabeçalho de telemetria não encontrado. O arquivo precisa conter colunas de altitude e tempo.');
+  }
+
+  const headers = lines[headerLine].replace(/^\s*#\s*/, '').split(',');
+  const iT = findColumn(headers, ['Tempo (s)', 'Tempo', 'Time (s)', 'Time']);
+  const iAlt = findColumn(headers, ['Altitude (m)', 'Altitude']);
+  const iDist = findColumn(headers, ['Distância lateral (m)', 'Distancia lateral (m)', 'Lateral distance (m)', 'Lateral distance']);
+  const iVV = findColumn(headers, ['Velocidade vertical (m/s)', 'Velocidade vertical', 'Vertical velocity (m/s)', 'Vertical velocity']);
+  const iAV = findColumn(headers, ['Aceleração vertical (m/s²)', 'Aceleracao vertical (m/s²)', 'Aceleração vertical', 'Vertical acceleration (m/s²)', 'Vertical acceleration']);
+
+  if (iT < 0 || iAlt < 0) {
+    throw new Error('O CSV precisa conter pelo menos "Tempo (s)" e "Altitude (m)".');
+  }
+
+  const pontos = [];
+  for (let i = headerLine + 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const cols = line.split(',');
+    const t = parseNumber(cols[iT]);
+    const alt = parseNumber(cols[iAlt]);
+    if (!Number.isFinite(t) || !Number.isFinite(alt)) continue;
+
+    const dist = iDist >= 0 ? parseNumber(cols[iDist]) : 0;
+    const vv = iVV >= 0 ? parseNumber(cols[iVV]) : NaN;
+    const av = iAV >= 0 ? parseNumber(cols[iAV]) : NaN;
+
+    pontos.push({
+      t,
+      alt,
+      dist: Number.isFinite(dist) ? dist : 0,
+      vv: Number.isFinite(vv) ? vv : 0,
+      av: Number.isFinite(av) ? av : 0
+    });
+  }
+
+  if (pontos.length < 2) throw new Error('Não foram encontradas amostras suficientes.');
+
+  pontos.sort((a,b) => a.t - b.t);
+  const eventos = parseEvents(text);
+
+  return { pontos, eventos };
+}
+
+function clearSvg(svgEl) {
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+}
+
+function buildChartsAndEvents() {
+  clearSvg(svg);
+  clearSvg(altTimeSvg);
+  eventTickEls = {};
+  eventListItems = {};
+
+  TMAX = Math.max(PONTOS[PONTOS.length - 1].t, 0.001);
+  ALT_MAX = Math.max(...PONTOS.map(p => p.alt), 1) * 1.18;
+  DIST_MAX = Math.max(...PONTOS.map(p => Math.abs(p.dist)), 1) * 1.12;
+  AT_ALT_MAX = Math.max(...PONTOS.map(p => p.alt), 1) * 1.12;
+
+  /* gráfico principal: altitude x distância */
+  gridLayer = el('g', {}, svg);
+  const stepY = niceStep(ALT_MAX, 6);
+  for (let v = 0; v <= ALT_MAX + stepY * 0.01; v += stepY) {
+    const y = sy(v);
+    el('line', { class:'grid-line', x1:MARGIN.left, x2:W-MARGIN.right, y1:y, y2:y }, gridLayer);
+    el('text', { class:'tick-label', x:MARGIN.left-10, y:y+4, 'text-anchor':'end' }, gridLayer).textContent = Math.round(v);
+  }
+
+  const stepX = niceStep(DIST_MAX, 6);
+  for (let v = 0; v <= DIST_MAX + stepX * 0.01; v += stepX) {
+    const x = sx(v);
+    el('line', { class:'grid-line', x1:x, x2:x, y1:MARGIN.top, y2:H-MARGIN.bottom }, gridLayer);
+    el('text', { class:'tick-label', x:x, y:H-MARGIN.bottom+18, 'text-anchor':'middle' }, gridLayer).textContent = Number(v.toFixed(2));
+  }
+
+  el('text', { class:'axis-label', x:MARGIN.left+plotW/2, y:H-6, 'text-anchor':'middle' }, svg).textContent = 'Distância lateral (m)';
+  const yLabel = el('text', { class:'axis-label', x:16, y:MARGIN.top+plotH/2, 'text-anchor':'middle' }, svg);
+  yLabel.textContent = 'Altitude (m)';
+  yLabel.setAttribute('transform', `rotate(-90,16,${MARGIN.top+plotH/2})`);
+
+  /* gráfico altitude x tempo */
+  atGrid = el('g', {}, altTimeSvg);
+  const atStepY = niceStep(AT_ALT_MAX, 5);
+  for (let v = 0; v <= AT_ALT_MAX + atStepY * 0.01; v += atStepY) {
+    const y = aty(v);
+    el('line', { class:'grid-line', x1:AT_MARGIN.left, x2:AT_W-AT_MARGIN.right, y1:y, y2:y }, atGrid);
+    el('text', { class:'tick-label', x:AT_MARGIN.left-10, y:y+4, 'text-anchor':'end' }, atGrid).textContent = Math.round(v);
+  }
+
+  const atStepX = niceStep(TMAX, 6);
+  for (let v = 0; v <= TMAX + atStepX * 0.01; v += atStepX) {
+    const x = atx(v);
+    el('line', { class:'grid-line', x1:x, x2:x, y1:AT_MARGIN.top, y2:AT_H-AT_MARGIN.bottom }, atGrid);
+    el('text', { class:'tick-label', x:x, y:AT_H-AT_MARGIN.bottom+18, 'text-anchor':'middle' }, atGrid).textContent = v.toFixed(1) + 's';
+  }
+
+  el('text', { class:'axis-label', x:AT_MARGIN.left+AT_plotW/2, y:AT_H-6, 'text-anchor':'middle' }, altTimeSvg).textContent = 'Tempo (s)';
+  const atYLabel = el('text', { class:'axis-label', x:16, y:AT_MARGIN.top+AT_plotH/2, 'text-anchor':'middle' }, altTimeSvg);
+  atYLabel.textContent = 'Altitude (m)';
+  atYLabel.setAttribute('transform', `rotate(-90,16,${AT_MARGIN.top+AT_plotH/2})`);
+  el('text', { class:'axis-label', x:AT_MARGIN.left+4, y:15 }, altTimeSvg).textContent = 'Altitude × tempo';
+
+  altTimePath = el('polyline', { class:'alt-time-path', points:'' }, altTimeSvg);
+  altTimeProgress = el('polyline', { class:'alt-time-progress', points:'' }, altTimeSvg);
+  altTimeMarker = el('circle', { class:'alt-time-marker', r:4.5, cx:atx(0), cy:aty(0) }, altTimeSvg);
+
+  /* eventos na trajetória */
+  const tickLayer = el('g', {}, svg);
+  const placedLabels = [];
+
+  EVENTOS.forEach((ev, i) => {
+    const p = pointAtTime(ev.t);
+    const px = sx(p.dist), py = sy(p.alt);
+    const g = el('g', { class:'event-tick', 'data-id':ev.id }, tickLayer);
+    el('circle', { class:'dot', cx:px, cy:py, r:5 }, g);
+
+    const nearby = placedLabels.filter(q => Math.hypot(q.x-px, q.y-py) < 30).length;
+    const direction = nearby % 2 === 0 ? -1 : 1;
+    const offset = 10 + Math.floor(nearby/2)*15;
+    const labelY = py + direction*offset;
+    placedLabels.push({x:px,y:py});
+
+    if (Math.abs(offset) > 12) {
+      el('line', {x1:px,y1:py,x2:px+10,y2:labelY,stroke:'var(--line)','stroke-width':1},g);
+    }
+    el('text', {x:px+10,y:labelY+4},g).textContent = ev.nome;
+    g.addEventListener('click', () => seekToEvent(i, true));
+    eventTickEls[ev.id] = g;
+  });
+
+  trajPath = el('polyline', { class:'traj-path', points:'' }, svg);
+  markerRing = el('circle', { class:'marker-current-ring', r:9, cx:sx(PONTOS[0].dist), cy:sy(PONTOS[0].alt) }, svg);
+  markerDot = el('circle', { class:'marker-current', r:4.5, cx:sx(PONTOS[0].dist), cy:sy(PONTOS[0].alt) }, svg);
+
+  if (typeof eventListEl !== 'undefined' && eventListEl) {
+    eventListEl.innerHTML = '';
+    EVENTOS.forEach((ev, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${ev.nome}</span><span class="t">t=${ev.t.toFixed(2)}s</span>`;
+      li.addEventListener('click', () => seekToEvent(i, true));
+      eventListEl.appendChild(li);
+      eventListItems[ev.id] = li;
+    });
+  }
+
+  scrubber.max = 1000;
+  scrubTotalLabel.textContent = TMAX.toFixed(1) + 's';
+}
+
+function renderAltitudeTimeChart(currentT) {
+  const fullPts = PONTOS.map(pt => `${atx(pt.t)},${aty(pt.alt)}`);
+  altTimePath.setAttribute('points', fullPts.join(' '));
+
+  const progress = PONTOS.filter(pt => pt.t <= currentT).map(pt => `${atx(pt.t)},${aty(pt.alt)}`);
+  const p = pointAtTime(currentT);
+  progress.push(`${atx(currentT)},${aty(p.alt)}`);
+  altTimeProgress.setAttribute('points', progress.join(' '));
+  altTimeMarker.setAttribute('cx', atx(currentT));
+  altTimeMarker.setAttribute('cy', aty(p.alt));
+}
+
+/* ---------- elementos da apresentação ---------- */
+const elAlt = document.getElementById('tAltitude');
+const elDist = document.getElementById('tDistancia');
+const elVel = document.getElementById('tVelocidade');
+const elAcc = document.getElementById('tAceleracao');
+const clockDisplay = document.getElementById('clockDisplay');
+const eventCard = document.getElementById('eventCard');
+const scrubber = document.getElementById('scrubber');
+const scrubTimeLabel = document.getElementById('scrubTimeLabel');
+const scrubTotalLabel = document.getElementById('scrubTotalLabel');
+const eventListEl = document.getElementById('eventList');
+const fileInput = document.getElementById('fileInput');
+const btnImportar = document.getElementById('btnImportar');
+const fileNameEl = document.getElementById('fileName');
+const importStatus = document.getElementById('importStatus');
+
+/* ---------- state ---------- */
+let currentTime = 0;
+let playing = false;
+let speed = 1;
+let lastFrameTs = null;
+let reachedIds = new Set();
+let currentEventIdx = -1; // indice do evento em que estamos "pausados / focados"
+
+function resetFlightState() {
+  playing = false;
+  currentTime = 0;
+  currentEventIdx = -1;
+  lastFrameTs = null;
+  reachedIds = new Set();
+  updatePlayButton();
+}
+
+function loadFlightData(parsed, fileName) {
+  PONTOS = parsed.pontos;
+  EVENTOS = parsed.eventos;
+
+  buildChartsAndEvents();
+  resetFlightState();
+  render();
+  renderEventCard(-1);
+
+  fileNameEl.textContent = fileName;
+  const maxAlt = Math.max(...PONTOS.map(p => p.alt));
+  importStatus.textContent =
+    `${PONTOS.length} amostras · ${TMAX.toFixed(2)} s · apogeu ${maxAlt.toFixed(2)} m · ${EVENTOS.length} eventos`;
+}
+
+btnImportar.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files?.[0];
+  if (!file) return;
+
+  try {
+    importStatus.textContent = 'Lendo arquivo...';
+    const text = await file.text();
+    const parsed = parseOpenRocketCSV(text);
+    loadFlightData(parsed, file.name);
+  } catch (err) {
+    console.error(err);
+    importStatus.textContent = 'Erro ao importar';
+    alert(`Não foi possível importar o lançamento.\n\n${err.message}`);
+  }
+});
+
+function renderEventCard(idx) {
+  if (idx < 0) {
+    eventCard.className = 'card event-card idle';
+    eventCard.innerHTML = `<h2>Evento</h2><p class="idle-msg" id="eventIdleMsg">Aguardando início do voo — dê play para começar.</p>`;
+    return;
+  }
+  const ev = EVENTOS[idx];
+  const isLast = idx === EVENTOS.length - 1;
+  eventCard.className = 'card event-card';
+  eventCard.innerHTML = `
+    <h2>Evento atual</h2>
+    <div class="event-name">${ev.nome}<span class="event-time">t = ${ev.t.toFixed(3)}s</span></div>
+    <p class="explain">${ev.explicacao}</p>
+    <button class="continue-btn" id="btnContinue">${isLast ? 'Reiniciar voo ↺' : 'Continuar voo →'}</button>
+  `;
+  document.getElementById('btnContinue').addEventListener('click', () => {
+    if (isLast) {
+      document.getElementById('btnRestart').click();
+      return;
+    }
+    playing = true;
+    lastFrameTs = null;
+    updatePlayButton();
+    requestAnimationFrame(tick);
+  });
+}
+
+function updatePlayButton() {
+  document.getElementById('btnPlay').textContent = playing ? '❚❚' : '▶';
+}
+
+function updateEventVisualStates() {
+  EVENTOS.forEach((ev, i) => {
+    const g = eventTickEls[ev.id];
+    const li = eventListItems[ev.id];
+    const isReached = currentTime >= ev.t - 1e-6;
+    g.classList.toggle('reached', isReached);
+    li.classList.toggle('reached', isReached);
+    g.classList.toggle('current', i === currentEventIdx);
+    li.classList.toggle('current', i === currentEventIdx);
+  });
+}
+
+function render() {
+  const p = pointAtTime(currentTime);
+
+  // trajetoria ate o ponto atual
+  const pts = PONTOS.filter(pt => pt.t <= currentTime).map(pt => `${sx(pt.dist)},${sy(pt.alt)}`);
+  pts.push(`${sx(p.dist)},${sy(p.alt)}`);
+  trajPath.setAttribute('points', pts.join(' '));
+
+  markerDot.setAttribute('cx', sx(p.dist));
+  markerDot.setAttribute('cy', sy(p.alt));
+  markerRing.setAttribute('cx', sx(p.dist));
+  markerRing.setAttribute('cy', sy(p.alt));
+
+  elAlt.textContent = p.alt.toFixed(1);
+  elDist.textContent = p.dist.toFixed(1);
+  elVel.textContent = p.vv.toFixed(1);
+  elAcc.textContent = p.av.toFixed(1);
+  clockDisplay.innerHTML = currentTime.toFixed(2) + '<span>s de voo</span>';
+
+  scrubber.value = Math.round((currentTime / TMAX) * 1000);
+  scrubTimeLabel.textContent = currentTime.toFixed(1) + 's';
+
+  updateEventVisualStates();
+  renderAltitudeTimeChart(currentTime);
+}
+
+function seekToEvent(idx, pauseHere) {
+  playing = false;
+  updatePlayButton();
+  currentTime = EVENTOS[idx].t;
+  currentEventIdx = idx;
+  EVENTOS.forEach((ev, i) => { if (i <= idx) reachedIds.add(ev.id); });
+  render();
+  if (pauseHere) renderEventCard(idx);
+}
+
+function tick(ts) {
+  if (!playing) return;
+  if (lastFrameTs === null) lastFrameTs = ts;
+  const dt = (ts - lastFrameTs) / 1000;
+  lastFrameTs = ts;
+
+  const prevTime = currentTime;
+  currentTime = Math.min(TMAX, currentTime + dt * speed);
+
+  // verifica se cruzamos algum evento ainda nao alcancado
+  for (let i = 0; i < EVENTOS.length; i++) {
+    const ev = EVENTOS[i];
+    if (!reachedIds.has(ev.id) && prevTime < ev.t && currentTime >= ev.t) {
+      currentTime = ev.t;
+      reachedIds.add(ev.id);
+      currentEventIdx = i;
+      playing = false;
+      updatePlayButton();
+      render();
+      renderEventCard(i);
+      return;
+    }
+  }
+
+  render();
+
+  if (currentTime >= TMAX) {
+    playing = false;
+    updatePlayButton();
+    return;
+  }
+
+  requestAnimationFrame(tick);
+}
+
+/* ---------- controls wiring ---------- */
+document.getElementById('btnPlay').addEventListener('click', () => {
+  playing = !playing;
+  lastFrameTs = null;
+  updatePlayButton();
+  if (playing) requestAnimationFrame(tick);
+});
+
+document.getElementById('btnRestart').addEventListener('click', () => {
+  playing = false;
+  currentTime = 0;
+  currentEventIdx = -1;
+  reachedIds = new Set();
+  updatePlayButton();
+  render();
+  renderEventCard(-1);
+});
+
+document.getElementById('btnNextEvent').addEventListener('click', () => {
+  const next = EVENTOS.findIndex(ev => ev.t > currentTime + 1e-6);
+  if (next !== -1) seekToEvent(next, true);
+});
+
+document.getElementById('btnPrevEvent').addEventListener('click', () => {
+  let prev = -1;
+  for (let i = 0; i < EVENTOS.length; i++) if (EVENTOS[i].t < currentTime - 1e-6) prev = i;
+  if (prev !== -1) seekToEvent(prev, true); else seekToEvent(0, true);
+});
+
+document.getElementById('speedGroup').addEventListener('click', (e) => {
+  const btn = e.target.closest('.speed-btn');
+  if (!btn) return;
+  speed = parseFloat(btn.dataset.speed);
+  document.querySelectorAll('.speed-btn').forEach(b => b.classList.toggle('active', b === btn));
+});
+
+scrubber.addEventListener('input', () => {
+  playing = false;
+  updatePlayButton();
+  currentTime = (scrubber.value / 1000) * TMAX;
+  // marca eventos ja ultrapassados como alcancados, sem abrir explicacao
+  reachedIds = new Set(EVENTOS.filter(ev => ev.t <= currentTime + 1e-6).map(ev => ev.id));
+  const idx = EVENTOS.reduce((acc, ev, i) => (ev.t <= currentTime + 1e-6 ? i : acc), -1);
+  currentEventIdx = -1;
+  render();
+  renderEventCard(-1);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    document.getElementById('btnPlay').click();
+  } else if (e.code === 'ArrowRight') {
+    document.getElementById('btnNextEvent').click();
+  } else if (e.code === 'ArrowLeft') {
+    document.getElementById('btnPrevEvent').click();
+  } else if (e.key.toLowerCase() === 'r') {
+    document.getElementById('btnRestart').click();
+  }
+});
+
+buildChartsAndEvents();
+render();
+</script>
+</body>
+</html>
