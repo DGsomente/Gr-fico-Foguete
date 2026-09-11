@@ -1,0 +1,1950 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telemetria de Voo — Trajetória do Foguete</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ---------- PALETA CÓSMICA ---------- */
+    --void:      #09030F;
+    --void-2:    #14082A;
+    --panel:     rgba(31, 14, 60, 0.62);
+    --panel-2:   rgba(48, 23, 88, 0.72);
+    --line:      rgba(170, 122, 255, 0.28);
+    --line-soft: rgba(170, 122, 255, 0.14);
+
+    --text:       #EFE6FF;
+    --text-muted: #A48FD4;
+
+    --violet:     #A77BFF;
+    --violet-hot: #C9A6FF;
+    --magenta:    #FF6FD8;
+    --gold:       #F7CE6B;
+    --aqua:       #6FE8E0;
+    --coral:      #FF7A8A;
+
+    --mono: "JetBrains Mono", ui-monospace, Consolas, "Roboto Mono", monospace;
+    --sans: "Space Grotesk", -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+    --rune: "Cinzel", Georgia, "Times New Roman", serif;
+
+    --glow-violet: 0 0 18px rgba(167,123,255,.45);
+    --glow-gold:   0 0 22px rgba(247,206,107,.45);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--void);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100%;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ---------- FUNDO: ESTRELAS + NEBULOSAS ---------- */
+  #starfield{
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    z-index: -3;
+    display: block;
+  }
+  .nebula{
+    position: fixed;
+    z-index: -2;
+    border-radius: 50%;
+    filter: blur(90px);
+    pointer-events: none;
+    opacity: .55;
+  }
+  .nebula.n1{
+    width: 52vw; height: 52vw; left: -14vw; top: -16vw;
+    background: radial-gradient(circle at 40% 40%, rgba(138,66,255,.55), transparent 68%);
+    animation: drift1 28s ease-in-out infinite alternate;
+  }
+  .nebula.n2{
+    width: 46vw; height: 46vw; right: -12vw; top: 18vh;
+    background: radial-gradient(circle at 60% 40%, rgba(255,90,200,.34), transparent 68%);
+    animation: drift2 34s ease-in-out infinite alternate;
+  }
+  .nebula.n3{
+    width: 40vw; height: 40vw; left: 28vw; bottom: -18vw;
+    background: radial-gradient(circle at 50% 50%, rgba(70,220,220,.22), transparent 70%);
+    animation: drift1 40s ease-in-out infinite alternate-reverse;
+  }
+  @keyframes drift1{ from{ transform: translate3d(0,0,0) scale(1);} to{ transform: translate3d(6vw,4vh,0) scale(1.14);} }
+  @keyframes drift2{ from{ transform: translate3d(0,0,0) scale(1.08);} to{ transform: translate3d(-5vw,6vh,0) scale(.92);} }
+
+  /* véu sutil por cima do fundo pra manter texto legível */
+  body::before{
+    content:"";
+    position: fixed; inset: 0; z-index:-1;
+    background: radial-gradient(ellipse at 50% 0%, rgba(20,8,42,.30), rgba(9,3,15,.82) 70%);
+    pointer-events: none;
+  }
+
+  /* ---------- HEADER ---------- */
+  header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 28px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    flex-wrap: wrap;
+    gap: 14px;
+    backdrop-filter: blur(6px);
+  }
+  header::after{
+    content:"";
+    position:absolute; left:0; right:0; bottom:-1px; height:1px;
+    background: linear-gradient(90deg, transparent, var(--violet), var(--magenta), transparent);
+    opacity:.5;
+  }
+
+  .title-block h1 {
+    font-family: var(--rune);
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 1.6px;
+    background: linear-gradient(92deg, var(--violet-hot), var(--magenta) 45%, var(--gold));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 26px rgba(167,123,255,.25);
+  }
+  .title-block p {
+    margin: 3px 0 0;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    letter-spacing: .3px;
+  }
+
+  .header-right{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+
+  .user-badge{
+    display:flex; align-items:center; gap:8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 7px 14px 7px 11px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .4px;
+    color: var(--text);
+    transition: .25s;
+    box-shadow: inset 0 0 20px rgba(167,123,255,.10);
+  }
+  .user-badge:hover{ border-color: var(--violet); box-shadow: var(--glow-violet), inset 0 0 20px rgba(167,123,255,.18); }
+  .user-badge .orb{
+    width: 20px; height: 20px; border-radius:50%;
+    background: radial-gradient(circle at 32% 30%, #fff, var(--violet-hot) 38%, var(--magenta) 100%);
+    box-shadow: 0 0 12px rgba(201,166,255,.8);
+    animation: orbPulse 3.2s ease-in-out infinite;
+  }
+  @keyframes orbPulse{ 0%,100%{ transform: scale(1);} 50%{ transform: scale(1.14);} }
+
+  .clock {
+    font-family: var(--mono);
+    font-size: 26px;
+    color: var(--gold);
+    font-variant-numeric: tabular-nums;
+    text-shadow: var(--glow-gold);
+  }
+  .clock span { font-size: 12px; color: var(--text-muted); font-family: var(--sans); margin-left: 6px; text-shadow:none; }
+
+  /* ---------- BOTÃO VER RANKING ---------- */
+  .rank-btn{
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(247,206,107,.55);
+    background: linear-gradient(120deg, rgba(120,50,180,.75), rgba(70,25,120,.75));
+    color: var(--gold);
+    font-family: var(--rune);
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    font-size: 13px;
+    padding: 11px 20px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 0 0 rgba(247,206,107,0);
+    animation: rankPulse 3.4s ease-in-out infinite;
+  }
+  .rank-btn:hover{ transform: translateY(-1px); filter: brightness(1.15); }
+  .rank-btn:active{ transform: translateY(1px) scale(.98); }
+  .rank-btn::after{
+    content:"";
+    position:absolute; top:-60%; left:-120%;
+    width: 60%; height: 220%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent);
+    transform: rotate(18deg);
+    animation: shimmer 3.6s ease-in-out infinite;
+  }
+  @keyframes shimmer{ 0%{ left:-120%; } 55%{ left:130%; } 100%{ left:130%; } }
+  @keyframes rankPulse{
+    0%,100%{ box-shadow: 0 0 0 rgba(247,206,107,0), inset 0 0 18px rgba(247,206,107,.10); }
+    50%{ box-shadow: 0 0 26px rgba(247,206,107,.35), inset 0 0 22px rgba(247,206,107,.18); }
+  }
+
+  .novo-btn{ padding: 11px 18px; font-size: 12px; letter-spacing: .4px; }
+
+  /* o botão de importar pulsa enquanto o novo piloto ainda não escolheu o CSV */
+  .import-btn-destaque{ animation: chamarCsv 1.5s ease-in-out infinite; }
+  @keyframes chamarCsv{
+    0%,100%{ box-shadow: 0 6px 20px rgba(167,123,255,.30); transform: scale(1); }
+    50%{ box-shadow: 0 0 0 10px rgba(201,166,255,0), 0 6px 30px rgba(255,111,216,.55); transform: scale(1.045); }
+  }
+
+  /* ---------- LAYOUT ---------- */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 20px;
+    padding: 18px 28px 24px;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+
+  .glass{
+    background: var(--panel);
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+
+  .chart-panel {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    min-height: 440px;
+    position: relative;
+  }
+  .chart-panel::before{
+    content:"✦";
+    position:absolute; top:8px; right:14px;
+    color: var(--violet); opacity:.45; font-size: 13px;
+    animation: twinkle 2.6s ease-in-out infinite;
+  }
+  @keyframes twinkle{ 0%,100%{ opacity:.2; transform: scale(.85) rotate(0deg);} 50%{ opacity:.75; transform: scale(1.15) rotate(35deg);} }
+
+  #chart { width: 100%; height: 62%; flex: 1; min-height: 0; }
+  #altTimeChart { width: 100%; height: 38%; min-height: 230px; border-top: 1px solid var(--line-soft); margin-top: 10px; padding-top: 10px; }
+
+  .alt-time-progress { fill: none; stroke: var(--gold); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .alt-time-marker { fill: var(--magenta); }
+
+  .axis-label { fill: var(--text-muted); font-size: 12px; font-family: var(--sans); letter-spacing:.5px; }
+  .grid-line { stroke: rgba(170,122,255,.13); stroke-width: 1; }
+  .grid-line.axis { stroke: rgba(170,122,255,.35); }
+  .tick-label { fill: var(--text-muted); font-size: 11px; font-family: var(--mono); }
+  .chart-caption{ fill: var(--violet-hot); font-family: var(--rune); font-size: 12px; letter-spacing: 1.4px; }
+
+  .traj-path { fill: none; stroke: url(#gradTraj); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .marker-current { fill: #fff; }
+  .marker-current-ring { fill: none; stroke: var(--magenta); stroke-width: 1.5; opacity: .65; }
+  .rocket-glyph{ font-size: 17px; }
+
+  /* eventos e marcas do apogeu nascem invisíveis e só aparecem quando
+     o voo passa por eles — nada de entregar o futuro antes do play */
+  .event-tick { cursor: pointer; opacity: 0; pointer-events: none; transform-box: fill-box; transform-origin: center; }
+  .event-tick.revelado { pointer-events: auto; animation: surgir .5s cubic-bezier(.2,.9,.3,1.35) forwards; }
+  .apogeu-marca { opacity: 0; }
+  .apogeu-marca.revelado { animation: aparecer .6s ease forwards; }
+  @keyframes surgir{ from{ opacity:0; transform: scale(.5); } to{ opacity:1; transform: scale(1); } }
+  @keyframes aparecer{ from{ opacity:0; } to{ opacity:1; } }
+  .event-tick circle.dot { fill: rgba(20,8,42,.9); stroke: rgba(170,122,255,.6); stroke-width: 1.5; transition: .25s; }
+  .event-tick:hover circle.dot { stroke: var(--violet-hot); r: 6.5; }
+  .event-tick.reached circle.dot { fill: var(--violet); stroke: var(--violet-hot); }
+  .event-tick.current circle.dot { fill: var(--gold); stroke: #fff; }
+  .event-tick.apogee circle.dot { fill: var(--gold); stroke: var(--gold); }
+  .event-tick text { fill: var(--text-muted); font-size: 11px; font-family: var(--sans); }
+  .event-tick.reached text, .event-tick.current text { fill: var(--text); }
+  .event-tick.apogee text { fill: var(--gold); font-weight: 600; }
+
+  /* ---------- SIDEBAR ---------- */
+  .sidebar { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .card { padding: 16px; }
+
+  .card h2 {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .18em;
+    color: var(--violet-hot);
+    margin: 0 0 12px;
+    font-weight: 700;
+    font-family: var(--rune);
+    display:flex; align-items:center; gap:7px;
+  }
+  .card h2::before{ content:"✧"; color: var(--gold); opacity:.9; }
+
+  .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+  .telemetry-item .val {
+    font-family: var(--mono);
+    font-size: 22px;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 14px rgba(167,123,255,.35);
+  }
+  .telemetry-item .label { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  .event-card { border-left: 3px solid var(--gold); transition: border-color .3s ease; }
+  .event-card.idle { border-left-color: rgba(170,122,255,.3); }
+  .event-card .event-name { font-size: 18px; font-weight: 700; margin: 0 0 8px; font-family: var(--rune); letter-spacing:.6px; }
+  .event-card .event-time { font-family: var(--mono); color: var(--gold); font-size: 13px; margin-left: 8px; letter-spacing:0; }
+  .event-card p.explain { font-size: 13.5px; line-height: 1.55; color: var(--text); margin: 0 0 12px; }
+  .event-card p.idle-msg { font-size: 13px; color: var(--text-muted); margin: 0; }
+
+  .btn-mystic{
+    background: linear-gradient(120deg, var(--violet), var(--magenta));
+    color: #1a0a2e;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 18px;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    cursor: pointer;
+    font-family: var(--sans);
+    box-shadow: 0 6px 20px rgba(167,123,255,.30);
+    transition: .2s;
+  }
+  .btn-mystic { white-space: nowrap; }
+  .btn-mystic:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  .btn-mystic:active { transform: translateY(1px); }
+  .btn-ghost{
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: 9px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition:.2s;
+  }
+  .btn-ghost:hover{ color: var(--text); border-color: var(--violet); background: rgba(167,123,255,.08); }
+  .btn-danger{ border-color: rgba(255,122,138,.45); color: var(--coral); }
+  .btn-danger:hover{ border-color: var(--coral); background: rgba(255,122,138,.12); color: #fff; }
+
+  .event-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
+  .event-list li {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    font-size: 13px; color: var(--text-muted);
+    border-left: 2px solid transparent; transition: .2s;
+  }
+  /* a linha do tempo é um registro do que já aconteceu: cada evento
+     só entra na lista no instante em que o voo passa por ele */
+  .event-list li { display: none; }
+  .event-list li.reached, .event-list li.current { display: flex; animation: entrarLista .45s cubic-bezier(.2,.9,.3,1.15) both; }
+  @keyframes entrarLista{ from{ opacity:0; transform: translateX(-14px); } to{ opacity:1; transform: translateX(0); } }
+  .event-list .aguardando { display: block; font-size: 12px; color: var(--text-muted); padding: 6px 4px; line-height:1.5; }
+  .event-list li:hover { background: rgba(167,123,255,.10); color: var(--text); }
+  .event-list li.reached { color: var(--text); border-left-color: var(--violet); }
+  .event-list li.current { color: #fff; border-left-color: var(--gold); background: rgba(247,206,107,.10); }
+  .event-list li.apogee .n::after{ content:" ★"; color: var(--gold); }
+  .event-list li .t { font-family: var(--mono); font-size: 12px; }
+
+  /* scrollbar cósmica */
+  .event-list::-webkit-scrollbar, .rank-scroll::-webkit-scrollbar { width: 7px; }
+  .event-list::-webkit-scrollbar-thumb, .rank-scroll::-webkit-scrollbar-thumb {
+    background: linear-gradient(var(--violet), var(--magenta)); border-radius: 10px;
+  }
+  .event-list::-webkit-scrollbar-track, .rank-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,.04); }
+
+  /* ---------- CONTROLES ---------- */
+  footer {
+    border-top: 1px solid var(--line-soft);
+    padding: 14px 28px 20px;
+    display: flex; flex-direction: column; gap: 10px;
+    backdrop-filter: blur(6px);
+  }
+  .transport-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .transport-buttons { display: flex; gap: 8px; }
+
+  .icon-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    transition: .2s;
+  }
+  .icon-btn:hover { background: rgba(167,123,255,.20); border-color: var(--violet); box-shadow: var(--glow-violet); }
+  .icon-btn.play {
+    width: 56px;
+    background: linear-gradient(120deg, var(--violet), var(--magenta));
+    border-color: transparent; color: #16072b; font-size: 17px;
+    box-shadow: 0 6px 22px rgba(199,90,220,.35);
+  }
+  .icon-btn.play:hover { filter: brightness(1.14); }
+
+  .speed-group { display: flex; gap: 5px; margin-left: 6px; }
+  .speed-btn {
+    background: transparent; border: 1px solid var(--line);
+    color: var(--text-muted); padding: 7px 11px; border-radius: 10px;
+    font-size: 12px; cursor: pointer; font-family: var(--mono); transition:.2s;
+  }
+  .speed-btn:hover{ color: var(--text); }
+  .speed-btn.active { background: rgba(247,206,107,.14); color: var(--gold); border-color: rgba(247,206,107,.5); }
+
+  .scrubber-row { display: flex; align-items: center; gap: 12px; }
+  .scrubber-row .t-label { font-family: var(--mono); font-size: 12px; color: var(--text-muted); width: 54px; }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    flex: 1; height: 5px; border-radius: 3px; outline: none;
+    background: linear-gradient(90deg, var(--violet), var(--magenta), rgba(255,255,255,.12));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: radial-gradient(circle at 32% 30%, #fff, var(--gold) 60%);
+    cursor: pointer; margin-top: -6px; box-shadow: 0 0 14px rgba(247,206,107,.8);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border: none; border-radius: 50%;
+    background: radial-gradient(circle at 32% 30%, #fff, var(--gold) 60%);
+    cursor: pointer; box-shadow: 0 0 14px rgba(247,206,107,.8);
+  }
+  .hint { font-size: 11px; color: var(--text-muted); letter-spacing:.3px; }
+
+  /* ---------- IMPORTAÇÃO ---------- */
+  .import-card {
+    display:flex; align-items:center; gap:12px;
+    margin: 14px 28px 0;
+    padding: 11px 14px;
+  }
+  .file-name { font-size: 12px; color: var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .import-status { margin-left:auto; font-size:11px; color:var(--violet-hot); font-family:var(--mono); }
+
+  /* ---------- OVERLAYS ---------- */
+  .overlay{
+    position: fixed; inset: 0;
+    display: none;
+    align-items: center; justify-content: center;
+    background: rgba(6,2,12,.78);
+    backdrop-filter: blur(9px);
+    z-index: 60;
+    padding: 22px;
+  }
+  .overlay.show{ display:flex; animation: fadeIn .35s ease both; }
+  @keyframes fadeIn{ from{opacity:0;} to{opacity:1;} }
+  @keyframes popIn{
+    0%{ opacity:0; transform: translateY(22px) scale(.92); }
+    60%{ opacity:1; transform: translateY(-4px) scale(1.02); }
+    100%{ opacity:1; transform: translateY(0) scale(1); }
+  }
+
+  /* --- PORTAL DE NOME --- */
+  #nameGate{ z-index: 90; background: rgba(6,2,12,.94); }
+  .gate-box{ position: relative; text-align:center; padding: 40px 34px; max-width: 460px; width:100%; animation: popIn .6s cubic-bezier(.2,.9,.3,1.2) both; }
+  .rune-ring{ position:absolute; inset:-40px; pointer-events:none; opacity:.55; }
+  .rune-ring circle{ fill:none; }
+  .r-out{ stroke: rgba(167,123,255,.55); stroke-width:1; stroke-dasharray: 4 10; transform-origin:50% 50%; animation: spin 26s linear infinite; }
+  .r-mid{ stroke: rgba(247,206,107,.45); stroke-width:1; stroke-dasharray: 1 14; transform-origin:50% 50%; animation: spin 18s linear infinite reverse; }
+  .r-in { stroke: rgba(255,111,216,.30); stroke-width:1; transform-origin:50% 50%; animation: spin 34s linear infinite; }
+  @keyframes spin{ from{ transform: rotate(0deg);} to{ transform: rotate(360deg);} }
+
+  .gate-box .sigil{ font-size: 40px; filter: drop-shadow(0 0 18px rgba(167,123,255,.8)); animation: floaty 4s ease-in-out infinite; }
+  @keyframes floaty{ 0%,100%{ transform: translateY(0);} 50%{ transform: translateY(-9px);} }
+  .gate-box h2{
+    font-family: var(--rune); font-size: 24px; margin: 12px 0 6px; letter-spacing: 2px;
+    background: linear-gradient(92deg, var(--violet-hot), var(--gold));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .gate-box p{ color: var(--text-muted); font-size: 13px; margin: 0 0 22px; line-height:1.55; }
+  .gate-input{
+    width: 100%;
+    background: rgba(12,4,24,.85);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-family: var(--sans);
+    letter-spacing: .6px;
+    text-align:center;
+    outline:none;
+    transition:.25s;
+  }
+  .gate-input:focus{ border-color: var(--violet); box-shadow: var(--glow-violet); }
+  .gate-input::placeholder{ color: rgba(164,143,212,.55); }
+  .gate-err{ color: var(--coral); font-size: 12px; min-height: 16px; margin: 8px 0 0; }
+  .gate-actions{ margin-top: 14px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+
+  /* --- CONFIRMAÇÃO --- */
+  .confirm-box{ max-width: 430px; width:100%; padding: 30px 28px; text-align:center; animation: popIn .4s cubic-bezier(.2,.9,.3,1.2) both; }
+  .confirm-box .sigil{ font-size: 30px; animation: floaty 3.4s ease-in-out infinite; }
+  .confirm-box h3{ font-family: var(--rune); font-size: 19px; margin: 12px 0 8px; letter-spacing: 1px; color: var(--text); }
+  .confirm-box p{ color: var(--text-muted); font-size: 13px; margin: 0 0 20px; line-height:1.5; }
+  .confirm-actions{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+
+  /* --- RANKING --- */
+  #rankingOverlay{ z-index: 70; }
+  .rank-box{
+    width: min(760px, 100%);
+    max-height: 88vh;
+    display:flex; flex-direction:column;
+    padding: 0;
+    overflow:hidden;
+    animation: popIn .5s cubic-bezier(.2,.9,.3,1.15) both;
+    border: 1px solid rgba(247,206,107,.28);
+  }
+  .rank-head{
+    position:relative;
+    padding: 22px 26px 18px;
+    text-align:center;
+    border-bottom: 1px solid var(--line-soft);
+    background: linear-gradient(180deg, rgba(90,40,150,.45), transparent);
+  }
+  .rank-head h2{
+    font-family: var(--rune); font-size: 23px; margin: 0; letter-spacing: 3px;
+    background: linear-gradient(92deg, var(--gold), var(--magenta) 60%, var(--violet-hot));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .rank-head p{ margin: 6px 0 0; font-size: 12px; color: var(--text-muted); letter-spacing:.5px; }
+  .rank-close{
+    position:absolute; top:14px; right:16px;
+    background: transparent; border: 1px solid var(--line); color: var(--text-muted);
+    width: 32px; height:32px; border-radius: 50%; cursor:pointer; font-size: 15px; transition:.2s;
+  }
+  .rank-close:hover{ color:#fff; border-color: var(--coral); background: rgba(255,122,138,.15); }
+
+  /* pódio */
+  .podium{ display:flex; align-items:flex-end; justify-content:center; gap: 14px; padding: 20px 26px 6px; }
+  .pod{ width: 128px; text-align:center; }
+  .pod .who{ font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pod .tm{ font-family: var(--mono); font-size: 12px; color: var(--gold); margin-bottom: 8px; }
+  .pod .medal{ font-size: 26px; display:block; margin-bottom: 4px; animation: floaty 3s ease-in-out infinite; }
+  .pod:nth-child(2) .medal{ animation-delay:.3s; }
+  .pod:nth-child(3) .medal{ animation-delay:.6s; }
+  .pod .bar{
+    border-radius: 12px 12px 0 0;
+    border:1px solid var(--line);
+    border-bottom:none;
+    display:flex; align-items:flex-start; justify-content:center;
+    font-family: var(--rune); font-size: 22px; font-weight:700; color:#fff;
+    padding-top: 8px;
+    height: 0;
+    transition: height .85s cubic-bezier(.2,.9,.3,1.1);
+    overflow:hidden;
+  }
+  .pod.p1 .bar{ background: linear-gradient(180deg, rgba(247,206,107,.55), rgba(247,206,107,.08)); box-shadow: 0 0 34px rgba(247,206,107,.28) inset; }
+  .pod.p2 .bar{ background: linear-gradient(180deg, rgba(201,166,255,.45), rgba(201,166,255,.06)); }
+  .pod.p3 .bar{ background: linear-gradient(180deg, rgba(255,111,216,.40), rgba(255,111,216,.06)); }
+
+  .rank-scroll{ overflow-y:auto; padding: 6px 26px 20px; }
+  .rank-table{ width:100%; border-collapse: collapse; }
+  .rank-table th{
+    text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.14em;
+    color: var(--text-muted); font-weight:600; padding: 10px 8px; border-bottom:1px solid var(--line-soft);
+    position: sticky; top:0; background: rgba(20,8,42,.96); backdrop-filter: blur(6px);
+  }
+  .rank-table td{ padding: 11px 8px; border-bottom: 1px solid rgba(170,122,255,.08); font-size: 13.5px; }
+  .rank-table tbody tr{ opacity:0; transform: translateX(-18px); }
+  .rank-table tbody tr.in{ animation: rowIn .45s cubic-bezier(.2,.9,.3,1.1) forwards; }
+  @keyframes rowIn{ to{ opacity:1; transform: translateX(0);} }
+  .rank-table tbody tr:hover{ background: rgba(167,123,255,.08); }
+  .rank-table .pos{ font-family: var(--rune); font-weight:700; font-size: 15px; width: 62px; color: var(--violet-hot); }
+  .rank-table tr.top1 .pos{ color: var(--gold); }
+  .rank-table tr.top2 .pos{ color: var(--violet-hot); }
+  .rank-table tr.top3 .pos{ color: var(--magenta); }
+  .rank-table .nm{ font-weight:600; }
+  .rank-table .tmv{ font-family: var(--mono); color: var(--gold); text-align:right; font-variant-numeric: tabular-nums; white-space:nowrap; }
+  .rank-table .dt{ font-family: var(--mono); font-size: 11px; color: var(--text-muted); text-align:right; white-space:nowrap; }
+  .rank-table tr.is-me{ background: rgba(247,206,107,.10); box-shadow: inset 3px 0 0 var(--gold); }
+  .rank-table tr.is-me .nm::after{ content:" ✦ você"; color: var(--gold); font-size: 10.5px; font-weight:600; letter-spacing:.4px; }
+  .rank-table tr.novo{ background: rgba(255,111,216,.16); box-shadow: inset 3px 0 0 var(--magenta); }
+  .rank-table tr.novo .nm::after{ content:" ✦ agora"; color: var(--magenta); }
+
+  .rank-empty{ text-align:center; padding: 40px 20px; color: var(--text-muted); }
+  .rank-empty .sigil{ font-size: 34px; display:block; margin-bottom: 12px; animation: floaty 4s ease-in-out infinite; }
+
+  .rank-foot{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding: 14px 26px; border-top:1px solid var(--line-soft);
+    background: rgba(12,4,24,.5);
+  }
+  .rank-foot .spacer{ margin-left:auto; }
+  .order-toggle{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-muted); }
+
+  .spark{
+    position: fixed; z-index: 54; pointer-events:none;
+    font-size: 16px;
+    animation: sparkUp 1.5s ease-out forwards;
+  }
+  @keyframes sparkUp{
+    0%{ opacity:1; transform: translate(0,0) scale(.5) rotate(0deg); }
+    100%{ opacity:0; transform: translate(var(--dx), var(--dy)) scale(1.3) rotate(220deg); }
+  }
+
+  /* --- TOAST --- */
+  #toast{
+    position: fixed; left: 50%; top: 22px; transform: translateX(-50%) translateY(-24px);
+    z-index: 95; padding: 12px 20px; border-radius: 999px;
+    font-size: 13px; color: var(--text);
+    border: 1px solid var(--line);
+    background: rgba(31,14,60,.92);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 10px 34px rgba(0,0,0,.5);
+    opacity: 0; pointer-events:none; transition: .35s cubic-bezier(.2,.9,.3,1.2);
+  }
+  #toast.show{ opacity:1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 620px){
+    header{ padding: 14px 16px; }
+    main{ padding: 14px 16px 20px; }
+    footer{ padding: 12px 16px 18px; }
+    .import-card{ margin: 12px 16px 0; flex-wrap: wrap; }
+    .podium{ gap: 8px; padding: 16px 12px 4px; }
+    .pod{ width: 96px; }
+    .rank-scroll{ padding: 6px 12px 16px; }
+    .rank-foot{ padding: 12px 14px; }
+    .rank-table .dt{ display:none; }
+    .rank-table th.dt{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+<div class="nebula n1"></div>
+<div class="nebula n2"></div>
+<div class="nebula n3"></div>
+
+<header>
+  <div class="title-block">
+    <h1>TELEMETRIA DE VOO</h1>
+    <p>Importe o CSV exportado pelo OpenRocket para carregar a trajetória</p>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge" title="Clique para trocar de piloto">
+      <span class="orb"></span><span id="userName">—</span>
+    </div>
+    <div class="clock" id="clockDisplay">0.00<span>s de voo</span></div>
+    <button class="rank-btn" id="btnVerRanking">★ VER RANKING ★</button>
+    <button class="btn-ghost novo-btn" id="btnFazerNovo" title="Limpa o voo, pede um novo nome e um novo CSV">⟳ Fazer de NOVO</button>
+  </div>
+</header>
+
+<div class="import-card glass">
+  <button class="btn-mystic" id="btnImportar">Abrir lançamento (.CSV)</button>
+  <input id="fileInput" type="file" accept=".csv,text/csv" hidden>
+  <span class="file-name" id="fileName">Nenhum arquivo carregado</span>
+  <span class="import-status" id="importStatus">Aguardando arquivo</span>
+</div>
+
+<main>
+  <div class="chart-panel glass">
+    <svg id="chart" viewBox="0 0 900 560" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg id="altTimeChart" viewBox="0 0 900 300" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+
+  <div class="sidebar">
+    <div class="card glass">
+      <h2>Telemetria atual</h2>
+      <div class="telemetry-grid">
+        <div class="telemetry-item">
+          <div class="val" id="tAltitude">0.0</div>
+          <div class="label">Altitude (m)</div>
+        </div>
+        <div class="telemetry-item">
+          <div class="val" id="tDistancia">0.0</div>
+          <div class="label">Distância lateral (m)</div>
+        </div>
+        <div class="telemetry-item">
+          <div class="val" id="tVelocidade">0.0</div>
+          <div class="label">Velocidade vertical (m/s)</div>
+        </div>
+        <div class="telemetry-item">
+          <div class="val" id="tAceleracao">0.0</div>
+          <div class="label">Aceleração vertical (m/s²)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card glass event-card idle" id="eventCard">
+      <h2>Evento</h2>
+      <p class="idle-msg">Aguardando início do voo — dê play para começar.</p>
+    </div>
+
+    <div class="card glass" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+      <h2>Linha do tempo de eventos</h2>
+      <ul class="event-list" id="eventList"></ul>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="transport-row">
+    <div class="transport-buttons">
+      <button class="icon-btn" id="btnRestart" title="Reiniciar (R)">⟲</button>
+      <button class="icon-btn" id="btnPrevEvent" title="Evento anterior (←)">⏮</button>
+      <button class="icon-btn play" id="btnPlay" title="Play/Pausa (Espaço)">▶</button>
+      <button class="icon-btn" id="btnNextEvent" title="Próximo evento (→)">⏭</button>
+    </div>
+    <div class="speed-group" id="speedGroup">
+      <button class="speed-btn" data-speed="0.5">0.5x</button>
+      <button class="speed-btn active" data-speed="1">1x</button>
+      <button class="speed-btn" data-speed="2">2x</button>
+      <button class="speed-btn" data-speed="4">4x</button>
+    </div>
+    <span class="hint">espaço = play/pausa · ← → = navegar entre eventos · R = reiniciar</span>
+  </div>
+  <div class="scrubber-row">
+    <span class="t-label" id="scrubTimeLabel">0.0s</span>
+    <input type="range" id="scrubber" min="0" max="1000" value="0">
+    <span class="t-label" id="scrubTotalLabel">0.0s</span>
+  </div>
+</footer>
+
+<!-- ============ PORTAL DE NOME ============ -->
+<div class="overlay show" id="nameGate">
+  <div class="gate-box glass">
+    <svg class="rune-ring" viewBox="0 0 200 200">
+      <circle class="r-out" cx="100" cy="100" r="96"/>
+      <circle class="r-mid" cx="100" cy="100" r="86"/>
+      <circle class="r-in"  cx="100" cy="100" r="76"/>
+    </svg>
+    <div class="sigil">🚀</div>
+    <h2>NOME DO PILOTO</h2>
+    <p>Este nome vai para o ranking quando<br>o foguete atingir o apogeu.</p>
+    <input class="gate-input" id="gateInput" type="text" maxlength="24" placeholder="digite seu nome" autocomplete="off" spellcheck="false">
+    <p class="gate-err" id="gateErr"></p>
+    <div class="gate-actions">
+      <button class="btn-mystic" id="gateOk">COMEÇAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CONFIRMAÇÃO ============ -->
+<div class="overlay" id="confirmOverlay">
+  <div class="confirm-box glass">
+    <div class="sigil" id="confirmSigil">🌙</div>
+    <h3 id="confirmTitle">Você tem certeza?</h3>
+    <p id="confirmText"></p>
+    <div class="confirm-actions">
+      <button class="btn-mystic" id="confirmOk">Sim</button>
+      <button class="btn-ghost" id="confirmCancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ RANKING ============ -->
+<div class="overlay" id="rankingOverlay">
+  <div class="rank-box glass">
+    <div class="rank-head">
+      <button class="rank-close" id="rankClose" title="Fechar">✕</button>
+      <h2>✦ RANKING DO APOGEU ✦</h2>
+      <p id="rankSubtitle">Classificação pelo tempo de apogeu</p>
+    </div>
+    <div class="podium" id="podium"></div>
+    <div class="rank-scroll" id="rankScroll"></div>
+    <div class="rank-foot">
+      <label class="order-toggle">
+        <select id="ordemSelect" class="btn-ghost" style="padding:7px 10px;">
+          <option value="desc">Maior tempo primeiro</option>
+          <option value="asc">Menor tempo primeiro</option>
+        </select>
+      </label>
+      <span class="spacer"></span>
+      <button class="btn-mystic" id="btnExportar">📊 Baixar planilha (Excel)</button>
+      <button class="btn-ghost btn-danger" id="btnLimpar">Limpar ranking</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =================================================================
+   0. CÉU ESTRELADO (canvas)
+================================================================= */
+(function(){
+  const cv = document.getElementById('starfield');
+  const ctx = cv.getContext('2d');
+  let W = 0, H = 0, estrelas = [], cometas = [], dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  function resize(){
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const qtd = Math.round((W * H) / 9000);
+    estrelas = [];
+    for (let i = 0; i < qtd; i++){
+      estrelas.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: Math.random() * 1.25 + 0.25,
+        fase: Math.random() * Math.PI * 2,
+        vel: 0.35 + Math.random() * 0.9,
+        vy: 0.012 + Math.random() * 0.035,
+        cor: Math.random() < 0.14 ? '247,206,107' : (Math.random() < 0.3 ? '255,111,216' : '235,225,255')
+      });
+    }
+  }
+
+  function novoCometa(){
+    cometas.push({
+      x: Math.random() * W * 0.7,
+      y: Math.random() * H * 0.4,
+      len: 90 + Math.random() * 120,
+      v: 5 + Math.random() * 4,
+      vida: 1
+    });
+  }
+
+  let t = 0;
+  function loop(){
+    t += 0.016;
+    ctx.clearRect(0, 0, W, H);
+
+    for (const s of estrelas){
+      const brilho = 0.35 + 0.65 * Math.abs(Math.sin(t * s.vel + s.fase));
+      s.y -= s.vy;
+      if (s.y < -2) s.y = H + 2;
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(' + s.cor + ',' + brilho.toFixed(3) + ')';
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+      if (s.r > 1.1){
+        ctx.globalAlpha = brilho * 0.30;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r * 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    for (let i = cometas.length - 1; i >= 0; i--){
+      const c = cometas[i];
+      c.x += c.v; c.y += c.v * 0.45; c.vida -= 0.012;
+      const g = ctx.createLinearGradient(c.x, c.y, c.x - c.len, c.y - c.len * 0.45);
+      g.addColorStop(0, 'rgba(255,255,255,' + Math.max(c.vida, 0).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(201,166,255,0)');
+      ctx.strokeStyle = g; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x - c.len, c.y - c.len * 0.45); ctx.stroke();
+      if (c.vida <= 0 || c.x > W + 200) cometas.splice(i, 1);
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  loop();
+  setInterval(() => { if (Math.random() < 0.55) novoCometa(); }, 4200);
+})();
+
+/* =================================================================
+   1. UTILIDADES DE INTERFACE (toast, confirmação, faíscas)
+================================================================= */
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function toast(msg, ms){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms || 3000);
+}
+
+const confirmOverlay = document.getElementById('confirmOverlay');
+const confirmTitle   = document.getElementById('confirmTitle');
+const confirmText    = document.getElementById('confirmText');
+const confirmSigil   = document.getElementById('confirmSigil');
+const confirmOkBtn   = document.getElementById('confirmOk');
+const confirmCancelBtn = document.getElementById('confirmCancel');
+let confirmResolve = null;
+
+function perguntar(titulo, texto, opts){
+  opts = opts || {};
+  confirmTitle.textContent = titulo;
+  confirmText.textContent = texto || '';
+  confirmSigil.textContent = opts.sigil || '🌙';
+  confirmOkBtn.textContent = opts.ok || 'Sim';
+  confirmCancelBtn.textContent = opts.cancel || 'Cancelar';
+  confirmOkBtn.classList.toggle('btn-danger', !!opts.perigo);
+  confirmOverlay.classList.add('show');
+  setTimeout(() => confirmOkBtn.focus(), 60);
+  return new Promise(res => { confirmResolve = res; });
+}
+function fecharConfirm(valor){
+  confirmOverlay.classList.remove('show');
+  if (confirmResolve){ const r = confirmResolve; confirmResolve = null; r(valor); }
+}
+confirmOkBtn.addEventListener('click', () => fecharConfirm(true));
+confirmCancelBtn.addEventListener('click', () => fecharConfirm(false));
+confirmOverlay.addEventListener('click', e => { if (e.target === confirmOverlay) fecharConfirm(false); });
+
+function faiscas(qtd, x, y){
+  const simbolos = ['✦','✧','★','🌟','💫','✨'];
+  for (let i = 0; i < qtd; i++){
+    const s = document.createElement('div');
+    s.className = 'spark';
+    s.textContent = simbolos[Math.floor(Math.random() * simbolos.length)];
+    s.style.left = x + 'px';
+    s.style.top  = y + 'px';
+    s.style.setProperty('--dx', (Math.random() * 320 - 160).toFixed(0) + 'px');
+    s.style.setProperty('--dy', (-Math.random() * 260 - 40).toFixed(0) + 'px');
+    s.style.animationDelay = (Math.random() * 0.25).toFixed(2) + 's';
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 1900);
+  }
+}
+
+function overlayAberto(){
+  return document.querySelector('.overlay.show') !== null;
+}
+
+/* =================================================================
+   2. PILOTO (nome pedido a cada abertura)
+================================================================= */
+const CHAVE_RANK  = 'ranking_apogeu_v1';
+const CHAVE_NOME  = 'ranking_apogeu_ultimo_nome';
+const CHAVE_ORDEM = 'ranking_apogeu_ordem';
+
+let USUARIO = '';
+let aguardandoCSV = false;   // true depois do "Fazer de NOVO", até entrar um CSV
+const nameGate  = document.getElementById('nameGate');
+const gateInput = document.getElementById('gateInput');
+const gateErr   = document.getElementById('gateErr');
+const userNameEl = document.getElementById('userName');
+
+/* Armazenamento: usa localStorage quando disponível; se o navegador bloquear
+   (alguns bloqueiam em arquivos abertos direto do disco), cai para memória —
+   o ranking continua funcionando, mas só até fechar a aba. */
+const STORE = (function(){
+  let ok = true;
+  try { localStorage.setItem('__teste__', '1'); localStorage.removeItem('__teste__'); }
+  catch(e){ ok = false; }
+  const mem = {};
+  return {
+    disponivel: ok,
+    get(chave, padrao){
+      if (!ok) return (chave in mem) ? mem[chave] : padrao;
+      try { const v = localStorage.getItem(chave); return v === null ? padrao : v; }
+      catch(e){ return padrao; }
+    },
+    set(chave, valor){
+      if (!ok){ mem[chave] = valor; return false; }
+      try { localStorage.setItem(chave, valor); return true; }
+      catch(e){ mem[chave] = valor; return false; }
+    }
+  };
+})();
+
+function lerLS(chave, padrao){ return STORE.get(chave, padrao); }
+function gravarLS(chave, valor){ return STORE.set(chave, valor); }
+
+/* limpar = true abre o campo em branco (é a vez de outra pessoa) */
+function abrirPortalNome(limpar){
+  gateErr.textContent = '';
+  gateInput.value = limpar === true ? '' : (USUARIO || lerLS(CHAVE_NOME, ''));
+  nameGate.classList.add('show');
+  setTimeout(() => { gateInput.focus(); gateInput.select(); }, 120);
+}
+
+function confirmarNome(){
+  const nome = gateInput.value.replace(/\s+/g, ' ').trim();
+  if (nome.length < 2){
+    gateErr.textContent = 'Digite pelo menos 2 letras.';
+    gateInput.focus();
+    return;
+  }
+  USUARIO = nome;
+  gravarLS(CHAVE_NOME, nome);
+  userNameEl.textContent = nome;
+  nameGate.classList.remove('show');
+  registroFeito = false; // novo piloto pode registrar o voo atual de novo
+  const r = document.getElementById('userBadge').getBoundingClientRect();
+  faiscas(14, r.left + r.width / 2, r.top + r.height / 2);
+
+  if (aguardandoCSV) toast('Agora importe o CSV do lançamento 🚀', 4500);
+  else toast('Piloto: ' + nome);
+}
+
+document.getElementById('gateOk').addEventListener('click', confirmarNome);
+gateInput.addEventListener('keydown', e => { if (e.key === 'Enter') confirmarNome(); });
+document.getElementById('userBadge').addEventListener('click', () => abrirPortalNome(false));
+
+/* =================================================================
+   3. RANKING (armazenamento + planilha)
+================================================================= */
+let ordemDesc = lerLS(CHAVE_ORDEM, 'desc') !== 'asc';
+document.getElementById('ordemSelect').value = ordemDesc ? 'desc' : 'asc';
+
+function lerRanking(){
+  try {
+    const arr = JSON.parse(lerLS(CHAVE_RANK, '[]') || '[]');
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(r => r && typeof r.nome === 'string' && Number.isFinite(Number(r.tApogeu)))
+              .map(r => ({ nome: r.nome, tApogeu: Number(r.tApogeu), data: r.data || '' }));
+  } catch(e){ return []; }
+}
+
+let avisouArmazenamento = false;
+function salvarRanking(arr){
+  if (!gravarLS(CHAVE_RANK, JSON.stringify(arr)) && !avisouArmazenamento){
+    avisouArmazenamento = true;
+    toast('Este navegador não guarda o ranking entre sessões — baixe a planilha', 6000);
+  }
+}
+
+function ordenarRanking(arr){
+  return [...arr].sort((a, b) => ordemDesc ? b.tApogeu - a.tApogeu : a.tApogeu - b.tApogeu);
+}
+
+function registrarApogeu(t){
+  const lista = lerRanking();
+  const registro = { nome: USUARIO, tApogeu: Number(t), data: new Date().toISOString() };
+  lista.push(registro);
+  salvarRanking(lista);
+  const ordenado = ordenarRanking(lista);
+  const pos = ordenado.findIndex(r => r.data === registro.data && r.nome === registro.nome && r.tApogeu === registro.tApogeu) + 1;
+  return { pos: pos || ordenado.length, total: ordenado.length, data: registro.data };
+}
+
+/* --- planilha compatível com Excel (CSV ; + BOM UTF-8) --- */
+function celula(v){
+  const s = String(v == null ? '' : v);
+  return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function exportarPlanilha(){
+  const lista = ordenarRanking(lerRanking());
+  if (!lista.length){ toast('O ranking ainda está vazio.'); return; }
+
+  const SEP = ';';
+  const linhas = [
+    ['RANKING DO APOGEU - classificacao pelo tempo de apogeu'].map(celula).join(SEP),
+    ['Gerado em', new Date().toLocaleString('pt-BR')].map(celula).join(SEP),
+    ['Criterio', ordemDesc ? 'Maior tempo de apogeu primeiro' : 'Menor tempo de apogeu primeiro'].map(celula).join(SEP),
+    '',
+    ['Posicao', 'Nome', 'Tempo do Apogeu (s)', 'Data'].map(celula).join(SEP)
+  ];
+
+  lista.forEach((r, i) => {
+    linhas.push([
+      i + 1,
+      r.nome,
+      r.tApogeu.toFixed(3).replace('.', ','),
+      r.data ? new Date(r.data).toLocaleString('pt-BR') : ''
+    ].map(celula).join(SEP));
+  });
+
+  // BOM UTF-8 para o Excel abrir os acentos corretamente
+  const BOM = String.fromCharCode(0xFEFF);
+  const conteudo = BOM + linhas.join('\r\n');
+  const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ranking_apogeu.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('Planilha baixada: ranking_apogeu.csv', 4000);
+}
+
+/* --- render do ranking --- */
+const rankingOverlay = document.getElementById('rankingOverlay');
+const rankScroll = document.getElementById('rankScroll');
+const podiumEl = document.getElementById('podium');
+const rankSubtitle = document.getElementById('rankSubtitle');
+
+function fmtT(t){ return t.toFixed(3) + ' s'; }
+
+function renderRanking(destaqueData){
+  const lista = ordenarRanking(lerRanking());
+  rankSubtitle.textContent = lista.length
+    ? lista.length + (lista.length === 1 ? ' voo registrado' : ' voos registrados') + ' · ' +
+      (ordemDesc ? 'maior tempo de apogeu no topo' : 'menor tempo de apogeu no topo')
+    : 'Classificação pelo tempo de apogeu';
+
+  /* pódio */
+  podiumEl.innerHTML = '';
+  if (lista.length){
+    const top = lista.slice(0, 3);
+    const medalhas = ['🥇', '🥈', '🥉'];
+    const alturas  = [104, 76, 58];
+    const ordemVisual = top.length === 3 ? [1, 0, 2] : (top.length === 2 ? [1, 0] : [0]);
+    ordemVisual.forEach(idx => {
+      const r = top[idx];
+      if (!r) return;
+      const d = document.createElement('div');
+      d.className = 'pod p' + (idx + 1);
+      d.innerHTML =
+        '<span class="medal">' + medalhas[idx] + '</span>' +
+        '<div class="who" title="' + r.nome.replace(/"/g, '&quot;') + '">' + escapeHtml(r.nome) + '</div>' +
+        '<div class="tm">' + fmtT(r.tApogeu) + '</div>' +
+        '<div class="bar">' + (idx + 1) + 'º</div>';
+      podiumEl.appendChild(d);
+      const bar = d.querySelector('.bar');
+      setTimeout(() => { bar.style.height = alturas[idx] + 'px'; }, 120 + idx * 130);
+    });
+  }
+
+  /* tabela */
+  if (!lista.length){
+    rankScroll.innerHTML =
+      '<div class="rank-empty"><span class="sigil">🌌</span>' +
+      'Nenhum voo registrado ainda.<br>' +
+      'Importe um CSV e reproduza até o <b>apogeu</b> para entrar no ranking.</div>';
+    return;
+  }
+
+  let html = '<table class="rank-table"><thead><tr>' +
+    '<th>Pos.</th><th>Piloto</th><th style="text-align:right">Tempo do apogeu</th><th class="dt" style="text-align:right">Data</th>' +
+    '</tr></thead><tbody>';
+
+  lista.forEach((r, i) => {
+    const classes = [];
+    if (i < 3) classes.push('top' + (i + 1));
+    if (USUARIO && r.nome === USUARIO) classes.push('is-me');
+    if (destaqueData && r.data === destaqueData) classes.push('novo');
+    const marca = i === 0 ? ' 👑' : '';
+    html += '<tr class="' + classes.join(' ') + '">' +
+      '<td class="pos">' + (i + 1) + 'º</td>' +
+      '<td class="nm">' + escapeHtml(r.nome) + marca + '</td>' +
+      '<td class="tmv">' + fmtT(r.tApogeu) + '</td>' +
+      '<td class="dt">' + (r.data ? new Date(r.data).toLocaleString('pt-BR') : '—') + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table>';
+  rankScroll.innerHTML = html;
+
+  /* entrada animada linha a linha */
+  const linhas = rankScroll.querySelectorAll('tbody tr');
+  linhas.forEach((tr, i) => {
+    setTimeout(() => tr.classList.add('in'), 90 + i * 55);
+  });
+
+  const alvo = rankScroll.querySelector('tr.novo') || rankScroll.querySelector('tr.is-me');
+  if (alvo) setTimeout(() => alvo.scrollIntoView({ block: 'center', behavior: 'smooth' }), 700);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function abrirRanking(destaqueData){
+  rankingOverlay.classList.add('show');
+  renderRanking(destaqueData);
+}
+function fecharRanking(){ rankingOverlay.classList.remove('show'); }
+
+/* --- o ranking só abre por clique e sempre pede confirmação --- */
+async function pedirRanking(destaqueData, origem){
+  const ok = await perguntar(
+    'Você tem certeza que quer mostrar o RANKING?',
+    'A classificação de todos os pilotos pelo tempo de apogeu vai aparecer na tela.',
+    { sigil: '🏆', ok: 'Sim, mostrar', cancel: 'Agora não' }
+  );
+  if (!ok) return;
+  if (origem){
+    const r = origem.getBoundingClientRect();
+    faiscas(18, r.left + r.width / 2, r.top + r.height / 2);
+  }
+  setTimeout(() => abrirRanking(destaqueData), 180);
+}
+
+document.getElementById('btnVerRanking').addEventListener('click', e => pedirRanking(null, e.currentTarget));
+
+document.getElementById('rankClose').addEventListener('click', fecharRanking);
+rankingOverlay.addEventListener('click', e => { if (e.target === rankingOverlay) fecharRanking(); });
+document.getElementById('btnExportar').addEventListener('click', exportarPlanilha);
+
+document.getElementById('ordemSelect').addEventListener('change', e => {
+  ordemDesc = e.target.value !== 'asc';
+  gravarLS(CHAVE_ORDEM, ordemDesc ? 'desc' : 'asc');
+  renderRanking(null);
+});
+
+document.getElementById('btnLimpar').addEventListener('click', async () => {
+  const ok = await perguntar(
+    'Apagar todo o ranking?',
+    'Todos os registros salvos neste navegador serão perdidos. Baixe a planilha antes se quiser guardar.',
+    { sigil: '☄️', ok: 'Apagar tudo', cancel: 'Cancelar', perigo: true }
+  );
+  if (!ok) return;
+  salvarRanking([]);
+  renderRanking(null);
+  toast('Ranking apagado.');
+});
+
+/* =================================================================
+   4. IMPORTAÇÃO DE TELEMETRIA
+   Aceita o CSV exportado pelo OpenRocket, incluindo:
+   - linhas de comentário antes do cabeçalho;
+   - NaN;
+   - nomes de colunas em português;
+   - linhas "# Event ... occurred at t=... seconds".
+================================================================= */
+let PONTOS = [{t:0, alt:0, dist:0, vv:0, av:0}];
+let EVENTOS = [];
+let TMAX = 1;
+let ALT_MAX = 1;
+let DIST_MAX = 1;
+
+let arquivoCarregado = false;
+let apogeuT = null;       // tempo do apogeu do voo carregado
+let apogeuAlt = 0;
+let registroFeito = false;
+
+const svg = document.getElementById('chart');
+const altTimeSvg = document.getElementById('altTimeChart');
+const NS = 'http://www.w3.org/2000/svg';
+
+const MARGIN = { top: 20, right: 30, bottom: 46, left: 60 };
+const W = 900, H = 560;
+const plotW = W - MARGIN.left - MARGIN.right;
+const plotH = H - MARGIN.top - MARGIN.bottom;
+
+const AT_W = 900, AT_H = 300;
+const AT_MARGIN = { top: 24, right: 30, bottom: 42, left: 60 };
+const AT_plotW = AT_W - AT_MARGIN.left - AT_MARGIN.right;
+const AT_plotH = AT_H - AT_MARGIN.top - AT_MARGIN.bottom;
+
+let AT_ALT_MAX = 1;
+let gridLayer = null;
+let atGrid = null;
+let trajPath = null;
+let apogeuMarcaEl = null;
+let markerRing = null;
+let markerDot = null;
+let rocketGlyph = null;
+let altTimeProgress = null;
+let altTimeMarker = null;
+let eventTickEls = {};
+let eventListItems = {};
+let aguardandoEl = null;
+
+function sx(dist) { return MARGIN.left + (dist / DIST_MAX) * plotW; }
+function sy(alt) { return MARGIN.top + plotH - (alt / ALT_MAX) * plotH; }
+function atx(t) { return AT_MARGIN.left + (t / TMAX) * AT_plotW; }
+function aty(alt) { return AT_MARGIN.top + AT_plotH - (alt / AT_ALT_MAX) * AT_plotH; }
+
+function niceStep(maxVal, targetCount) {
+  const safe = Math.max(maxVal, 1e-9);
+  const raw = safe / targetCount;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  let step;
+  if (norm < 1.5) step = 1;
+  else if (norm < 3) step = 2;
+  else if (norm < 7) step = 5;
+  else step = 10;
+  return step * mag;
+}
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function pointAtTime(t) {
+  if (t <= PONTOS[0].t) return PONTOS[0];
+  if (t >= PONTOS[PONTOS.length - 1].t) return PONTOS[PONTOS.length - 1];
+
+  let lo = 0, hi = PONTOS.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (PONTOS[mid].t <= t) lo = mid;
+    else hi = mid;
+  }
+
+  const a = PONTOS[lo], b = PONTOS[hi];
+  const f = (t - a.t) / (b.t - a.t || 1);
+  return {
+    t,
+    alt: a.alt + (b.alt - a.alt) * f,
+    dist: a.dist + (b.dist - a.dist) * f,
+    vv: a.vv + (b.vv - a.vv) * f,
+    av: a.av + (b.av - a.av) * f
+  };
+}
+
+function normalizeText(s) {
+  return String(s ?? '')
+    .replace(/​/g, '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function parseNumber(v) {
+  if (v == null) return NaN;
+  const s = String(v).trim().replace(/^"|"$/g, '');
+  if (!s || /^nan$/i.test(s)) return NaN;
+  return Number(s.replace(',', '.'));
+}
+
+function findColumn(headers, patterns) {
+  const normalized = headers.map(normalizeText);
+  for (const pattern of patterns) {
+    const p = normalizeText(pattern);
+    const idx = normalized.findIndex(h => h === p);
+    if (idx !== -1) return idx;
+  }
+  for (const pattern of patterns) {
+    const p = normalizeText(pattern);
+    const idx = normalized.findIndex(h => h.includes(p));
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+const EVENT_NAMES = {
+  IGNITION: ['Ignição', 'Ignição do motor'],
+  LAUNCH: ['Lançamento'],
+  LIFTOFF: ['Decolagem'],
+  LAUNCHROD: ['Saída da haste'],
+  BURNOUT: ['Fim da queima'],
+  EJECTION_CHARGE: ['Carga de ejeção'],
+  RECOVERY_DEVICE_DEPLOYMENT: ['Abertura do paraquedas'],
+  APOGEE: ['Apogeu'],
+  GROUND_HIT: ['Pouso'],
+  SIMULATION_END: ['Fim da simulação']
+};
+
+const EVENT_EXPLANATIONS = {
+  IGNITION: 'O sistema de ignição inicia a queima do motor.',
+  LAUNCH: 'Início do lançamento registrado na simulação.',
+  LIFTOFF: 'O foguete deixa a plataforma e inicia o voo livre.',
+  LAUNCHROD: 'O foguete deixa a haste ou trilho de lançamento.',
+  BURNOUT: 'O propelente se esgota e o motor deixa de produzir empuxo.',
+  EJECTION_CHARGE: 'A carga de ejeção do sistema de recuperação é acionada.',
+  RECOVERY_DEVICE_DEPLOYMENT: 'O dispositivo de recuperação é acionado e inicia a desaceleração.',
+  APOGEE: 'Ponto de altitude máxima; a velocidade vertical passa por zero. É este instante que vale no ranking.',
+  GROUND_HIT: 'O foguete toca o solo, encerrando o voo.',
+  SIMULATION_END: 'Fim do intervalo registrado na simulação.'
+};
+
+function parseEvents(text) {
+  const events = [];
+  const re = /^\s*#\s*Event\s+([A-Za-z0-9_]+)\s+occurred\s+at\s+t\s*=\s*([-+0-9.eE]+)\s+seconds\s*$/i;
+  const seen = new Set();
+
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(re);
+    if (!m) continue;
+
+    const id = m[1].toUpperCase();
+    const t = Number(m[2]);
+    if (!Number.isFinite(t)) continue;
+
+    // LAUNCH e LIFTOFF podem coincidir; ambos são mantidos porque
+    // representam eventos distintos no arquivo exportado.
+    const key = `${id}@${t}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const nome = EVENT_NAMES[id]?.[0] || id.replace(/_/g, ' ');
+    events.push({
+      id,
+      nome,
+      t,
+      explicacao: EVENT_EXPLANATIONS[id] || `Evento ${nome} registrado pelo arquivo de telemetria.`
+    });
+  }
+
+  events.sort((a,b) => a.t - b.t);
+  return events;
+}
+
+function parseOpenRocketCSV(text) {
+  // remove o BOM (U+FEFF) se o arquivo vier com ele
+  const limpo = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+  const lines = limpo.split(/\r?\n/);
+
+  let headerLine = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*#.*\b(Tempo|Time)\b.*,/i.test(lines[i]) && /Altitude\s*\(m\)/i.test(lines[i])) {
+      headerLine = i;
+      break;
+    }
+  }
+
+  if (headerLine === -1) {
+    // fallback: primeiro comentário que contenha Tempo (s)
+    headerLine = lines.findIndex(l => /Tempo\s*\(s\)/i.test(l));
+  }
+
+  if (headerLine === -1) {
+    throw new Error('Cabeçalho de telemetria não encontrado. O arquivo precisa conter colunas de altitude e tempo.');
+  }
+
+  const headers = lines[headerLine].replace(/^\s*#\s*/, '').split(',');
+  const iT = findColumn(headers, ['Tempo (s)', 'Tempo', 'Time (s)', 'Time']);
+  const iAlt = findColumn(headers, ['Altitude (m)', 'Altitude']);
+  const iDist = findColumn(headers, ['Distância lateral (m)', 'Distancia lateral (m)', 'Lateral distance (m)', 'Lateral distance']);
+  const iVV = findColumn(headers, ['Velocidade vertical (m/s)', 'Velocidade vertical', 'Vertical velocity (m/s)', 'Vertical velocity']);
+  const iAV = findColumn(headers, ['Aceleração vertical (m/s²)', 'Aceleracao vertical (m/s²)', 'Aceleração vertical', 'Vertical acceleration (m/s²)', 'Vertical acceleration']);
+
+  if (iT < 0 || iAlt < 0) {
+    throw new Error('O CSV precisa conter pelo menos "Tempo (s)" e "Altitude (m)".');
+  }
+
+  const pontos = [];
+  for (let i = headerLine + 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const cols = line.split(',');
+    const t = parseNumber(cols[iT]);
+    const alt = parseNumber(cols[iAlt]);
+    if (!Number.isFinite(t) || !Number.isFinite(alt)) continue;
+
+    const dist = iDist >= 0 ? parseNumber(cols[iDist]) : 0;
+    const vv = iVV >= 0 ? parseNumber(cols[iVV]) : NaN;
+    const av = iAV >= 0 ? parseNumber(cols[iAV]) : NaN;
+
+    pontos.push({
+      t,
+      alt,
+      dist: Number.isFinite(dist) ? dist : 0,
+      vv: Number.isFinite(vv) ? vv : 0,
+      av: Number.isFinite(av) ? av : 0
+    });
+  }
+
+  if (pontos.length < 2) throw new Error('Não foram encontradas amostras suficientes.');
+
+  pontos.sort((a,b) => a.t - b.t);
+  const eventos = parseEvents(text);
+
+  return { pontos, eventos };
+}
+
+function clearSvg(svgEl) {
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+}
+
+function addDefs(svgEl, idGrad, idGlow){
+  const defs = el('defs', {}, svgEl);
+
+  const g = el('linearGradient', { id: idGrad, x1:'0', y1:'1', x2:'1', y2:'0' }, defs);
+  el('stop', { offset:'0%',   'stop-color':'#6FE8E0' }, g);
+  el('stop', { offset:'45%',  'stop-color':'#C9A6FF' }, g);
+  el('stop', { offset:'100%', 'stop-color':'#FF6FD8' }, g);
+
+  const f = el('filter', { id: idGlow, x:'-60%', y:'-60%', width:'220%', height:'220%' }, defs);
+  el('feGaussianBlur', { stdDeviation:'3.4', result:'blur' }, f);
+  const merge = el('feMerge', {}, f);
+  el('feMergeNode', { in:'blur' }, merge);
+  el('feMergeNode', { in:'SourceGraphic' }, merge);
+  return defs;
+}
+
+function buildChartsAndEvents() {
+  clearSvg(svg);
+  clearSvg(altTimeSvg);
+  eventTickEls = {};
+  eventListItems = {};
+
+  addDefs(svg, 'gradTraj', 'glowTraj');
+  addDefs(altTimeSvg, 'gradAT', 'glowAT');
+
+  TMAX = Math.max(PONTOS[PONTOS.length - 1].t, 0.001);
+  ALT_MAX = Math.max(...PONTOS.map(p => p.alt), 1) * 1.18;
+  DIST_MAX = Math.max(...PONTOS.map(p => Math.abs(p.dist)), 1) * 1.12;
+  AT_ALT_MAX = Math.max(...PONTOS.map(p => p.alt), 1) * 1.12;
+
+  /* gráfico principal: altitude x distância */
+  gridLayer = el('g', {}, svg);
+  const stepY = niceStep(ALT_MAX, 6);
+  for (let v = 0; v <= ALT_MAX + stepY * 0.01; v += stepY) {
+    const y = sy(v);
+    el('line', { class: v === 0 ? 'grid-line axis' : 'grid-line', x1:MARGIN.left, x2:W-MARGIN.right, y1:y, y2:y }, gridLayer);
+    el('text', { class:'tick-label', x:MARGIN.left-10, y:y+4, 'text-anchor':'end' }, gridLayer).textContent = Math.round(v);
+  }
+
+  const stepX = niceStep(DIST_MAX, 6);
+  for (let v = 0; v <= DIST_MAX + stepX * 0.01; v += stepX) {
+    const x = sx(v);
+    el('line', { class: v === 0 ? 'grid-line axis' : 'grid-line', x1:x, x2:x, y1:MARGIN.top, y2:H-MARGIN.bottom }, gridLayer);
+    el('text', { class:'tick-label', x:x, y:H-MARGIN.bottom+18, 'text-anchor':'middle' }, gridLayer).textContent = Number(v.toFixed(2));
+  }
+
+  el('text', { class:'axis-label', x:MARGIN.left+plotW/2, y:H-6, 'text-anchor':'middle' }, svg).textContent = 'Distância lateral (m)';
+  const yLabel = el('text', { class:'axis-label', x:16, y:MARGIN.top+plotH/2, 'text-anchor':'middle' }, svg);
+  yLabel.textContent = 'Altitude (m)';
+  yLabel.setAttribute('transform', `rotate(-90,16,${MARGIN.top+plotH/2})`);
+  el('text', { class:'chart-caption', x:MARGIN.left+2, y:14 }, svg).textContent = 'TRAJETÓRIA — ALTITUDE × DISTÂNCIA';
+
+  /* gráfico altitude x tempo */
+  atGrid = el('g', {}, altTimeSvg);
+  const atStepY = niceStep(AT_ALT_MAX, 5);
+  for (let v = 0; v <= AT_ALT_MAX + atStepY * 0.01; v += atStepY) {
+    const y = aty(v);
+    el('line', { class: v === 0 ? 'grid-line axis' : 'grid-line', x1:AT_MARGIN.left, x2:AT_W-AT_MARGIN.right, y1:y, y2:y }, atGrid);
+    el('text', { class:'tick-label', x:AT_MARGIN.left-10, y:y+4, 'text-anchor':'end' }, atGrid).textContent = Math.round(v);
+  }
+
+  const atStepX = niceStep(TMAX, 6);
+  for (let v = 0; v <= TMAX + atStepX * 0.01; v += atStepX) {
+    const x = atx(v);
+    el('line', { class: v === 0 ? 'grid-line axis' : 'grid-line', x1:x, x2:x, y1:AT_MARGIN.top, y2:AT_H-AT_MARGIN.bottom }, atGrid);
+    el('text', { class:'tick-label', x:x, y:AT_H-AT_MARGIN.bottom+18, 'text-anchor':'middle' }, atGrid).textContent = v.toFixed(1) + 's';
+  }
+
+  el('text', { class:'axis-label', x:AT_MARGIN.left+AT_plotW/2, y:AT_H-6, 'text-anchor':'middle' }, altTimeSvg).textContent = 'Tempo (s)';
+  const atYLabel = el('text', { class:'axis-label', x:16, y:AT_MARGIN.top+AT_plotH/2, 'text-anchor':'middle' }, altTimeSvg);
+  atYLabel.textContent = 'Altitude (m)';
+  atYLabel.setAttribute('transform', `rotate(-90,16,${AT_MARGIN.top+AT_plotH/2})`);
+  el('text', { class:'chart-caption', x:AT_MARGIN.left+2, y:15 }, altTimeSvg).textContent = 'ALTITUDE × TEMPO';
+
+  /* marca do apogeu: fica escondida até o voo chegar lá */
+  apogeuMarcaEl = null;
+  if (apogeuT != null) {
+    const xa = atx(apogeuT);
+    apogeuMarcaEl = el('g', { class:'apogeu-marca' }, altTimeSvg);
+    el('line', {
+      x1:xa, x2:xa, y1:AT_MARGIN.top, y2:AT_H-AT_MARGIN.bottom,
+      stroke:'rgba(247,206,107,.45)', 'stroke-width':1.2, 'stroke-dasharray':'5 5'
+    }, apogeuMarcaEl);
+    el('text', {
+      class:'tick-label', x:xa+5, y:AT_MARGIN.top+12, fill:'#F7CE6B'
+    }, apogeuMarcaEl).textContent = '★ apogeu ' + apogeuT.toFixed(3) + 's';
+  }
+
+  altTimeProgress = el('polyline', { class:'alt-time-progress', points:'', filter:'url(#glowAT)' }, altTimeSvg);
+  altTimeMarker = el('circle', { class:'alt-time-marker', r:4.5, cx:atx(0), cy:aty(0), filter:'url(#glowAT)' }, altTimeSvg);
+
+  /* eventos na trajetória (escondidos até serem alcançados) */
+  const tickLayer = el('g', {}, svg);
+  const placedLabels = [];
+
+  EVENTOS.forEach((ev, i) => {
+    const p = pointAtTime(ev.t);
+    const px = sx(p.dist), py = sy(p.alt);
+    const g = el('g', { class:'event-tick' + (ev.id === 'APOGEE' ? ' apogee' : ''), 'data-id':ev.id }, tickLayer);
+    el('circle', { class:'dot', cx:px, cy:py, r: ev.id === 'APOGEE' ? 6.5 : 5 }, g);
+
+    const nearby = placedLabels.filter(q => Math.hypot(q.x-px, q.y-py) < 30).length;
+    const direction = nearby % 2 === 0 ? -1 : 1;
+    const offset = 10 + Math.floor(nearby/2)*15;
+    const labelY = py + direction*offset;
+    placedLabels.push({x:px,y:py});
+
+    if (Math.abs(offset) > 12) {
+      el('line', {x1:px,y1:py,x2:px+10,y2:labelY,stroke:'rgba(170,122,255,.4)','stroke-width':1},g);
+    }
+    el('text', {x:px+10,y:labelY+4},g).textContent = (ev.id === 'APOGEE' ? '★ ' : '') + ev.nome;
+    g.addEventListener('click', () => seekToEvent(i, true));
+    eventTickEls[ev.id] = g;
+  });
+
+  trajPath = el('polyline', { class:'traj-path', points:'', filter:'url(#glowTraj)' }, svg);
+  markerRing = el('circle', { class:'marker-current-ring', r:11, cx:sx(PONTOS[0].dist), cy:sy(PONTOS[0].alt) }, svg);
+  markerDot = el('circle', { class:'marker-current', r:3, cx:sx(PONTOS[0].dist), cy:sy(PONTOS[0].alt), filter:'url(#glowTraj)' }, svg);
+  rocketGlyph = el('text', { class:'rocket-glyph', x:sx(PONTOS[0].dist), y:sy(PONTOS[0].alt), 'text-anchor':'middle', dy:'-12' }, svg);
+  rocketGlyph.textContent = '🚀';
+
+  if (eventListEl) {
+    eventListEl.innerHTML = '';
+    aguardandoEl = document.createElement('li');
+    aguardandoEl.className = 'aguardando';
+    aguardandoEl.textContent = arquivoCarregado
+      ? 'Os eventos aparecem aqui conforme o voo avança.'
+      : 'Importe um lançamento para começar.';
+    eventListEl.appendChild(aguardandoEl);
+
+    EVENTOS.forEach((ev, i) => {
+      const li = document.createElement('li');
+      if (ev.id === 'APOGEE') li.classList.add('apogee');
+      li.innerHTML = `<span class="n">${ev.nome}</span><span class="t">t=${ev.t.toFixed(2)}s</span>`;
+      li.addEventListener('click', () => seekToEvent(i, true));
+      eventListEl.appendChild(li);
+      eventListItems[ev.id] = li;
+    });
+  }
+
+  if (!arquivoCarregado) {
+    const aviso = el('text', {
+      class:'chart-caption', x: MARGIN.left + plotW/2, y: MARGIN.top + plotH/2,
+      'text-anchor':'middle', 'font-size':'15'
+    }, svg);
+    aviso.textContent = 'Importe um lançamento (.CSV) para ver a trajetória';
+  }
+
+  scrubber.max = 1000;
+  scrubTotalLabel.textContent = TMAX.toFixed(1) + 's';
+}
+
+function renderAltitudeTimeChart(currentT) {
+  // só o trecho já percorrido é desenhado — o resto do voo continua oculto
+  const progress = PONTOS.filter(pt => pt.t <= currentT).map(pt => `${atx(pt.t)},${aty(pt.alt)}`);
+  const p = pointAtTime(currentT);
+  progress.push(`${atx(currentT)},${aty(p.alt)}`);
+  altTimeProgress.setAttribute('points', progress.join(' '));
+  altTimeMarker.setAttribute('cx', atx(currentT));
+  altTimeMarker.setAttribute('cy', aty(p.alt));
+}
+
+/* ---------- elementos da apresentação ---------- */
+const elAlt = document.getElementById('tAltitude');
+const elDist = document.getElementById('tDistancia');
+const elVel = document.getElementById('tVelocidade');
+const elAcc = document.getElementById('tAceleracao');
+const clockDisplay = document.getElementById('clockDisplay');
+const eventCard = document.getElementById('eventCard');
+const scrubber = document.getElementById('scrubber');
+const scrubTimeLabel = document.getElementById('scrubTimeLabel');
+const scrubTotalLabel = document.getElementById('scrubTotalLabel');
+const eventListEl = document.getElementById('eventList');
+const fileInput = document.getElementById('fileInput');
+const btnImportar = document.getElementById('btnImportar');
+const fileNameEl = document.getElementById('fileName');
+const importStatus = document.getElementById('importStatus');
+
+/* ---------- state ---------- */
+let currentTime = 0;
+let playing = false;
+let speed = 1;
+let lastFrameTs = null;
+let reachedIds = new Set();
+let currentEventIdx = -1;
+
+function resetFlightState() {
+  playing = false;
+  currentTime = 0;
+  currentEventIdx = -1;
+  lastFrameTs = null;
+  reachedIds = new Set();
+  updatePlayButton();
+}
+
+function calcularApogeu() {
+  const ev = EVENTOS.find(e => e.id === 'APOGEE');
+  if (ev) {
+    apogeuT = ev.t;
+    apogeuAlt = pointAtTime(ev.t).alt;
+    return;
+  }
+  // sem evento APOGEE no arquivo: usa o instante de altitude máxima
+  let melhor = PONTOS[0];
+  for (const p of PONTOS) if (p.alt > melhor.alt) melhor = p;
+  apogeuT = melhor.t;
+  apogeuAlt = melhor.alt;
+}
+
+function loadFlightData(parsed, fileName) {
+  PONTOS = parsed.pontos;
+  EVENTOS = parsed.eventos;
+
+  arquivoCarregado = true;
+  calcularApogeu();
+  buildChartsAndEvents();
+  resetFlightState();
+  registroFeito = false;
+  render();
+  renderEventCard(-1);
+
+  aguardandoCSV = false;
+  btnImportar.classList.remove('import-btn-destaque');
+
+  fileNameEl.textContent = fileName;
+  importStatus.textContent =
+    `${PONTOS.length} amostras · ${EVENTOS.length} eventos · pronto para decolar`;
+  toast('Voo carregado — dê play até o apogeu para entrar no ranking');
+}
+
+/* Zera a apresentação para a próxima pessoa: limpa o voo da tela,
+   pede um nome novo e exige a importação de outro CSV. */
+async function fazerDeNovo(){
+  const ok = await perguntar(
+    'Fazer tudo de novo?',
+    'O voo atual sai da tela. Você vai digitar um nome novo e importar outro CSV. O ranking já salvo continua guardado.',
+    { sigil: '🔁', ok: 'Sim, do zero', cancel: 'Cancelar' }
+  );
+  if (!ok) return;
+
+  fecharRanking();
+
+  PONTOS = [{t:0, alt:0, dist:0, vv:0, av:0}];
+  EVENTOS = [];
+  arquivoCarregado = false;
+  registroFeito = false;
+  apogeuT = null;
+  apogeuAlt = 0;
+  aguardandoCSV = true;
+
+  fileInput.value = '';
+  fileNameEl.textContent = 'Nenhum arquivo carregado';
+  importStatus.textContent = 'Aguardando arquivo';
+  btnImportar.classList.add('import-btn-destaque');
+
+  buildChartsAndEvents();
+  resetFlightState();
+  render();
+  renderEventCard(-1);
+
+  abrirPortalNome(true);
+}
+
+document.getElementById('btnFazerNovo').addEventListener('click', fazerDeNovo);
+
+btnImportar.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files?.[0];
+  if (!file) return;
+
+  try {
+    importStatus.textContent = 'Lendo arquivo...';
+    const text = await file.text();
+    const parsed = parseOpenRocketCSV(text);
+    loadFlightData(parsed, file.name);
+  } catch (err) {
+    console.error(err);
+    importStatus.textContent = 'Erro ao importar';
+    toast('Não foi possível importar: ' + err.message, 5000);
+  } finally {
+    fileInput.value = '';
+  }
+});
+
+/* =================================================================
+   5. REGISTRO DO APOGEU NO RANKING
+================================================================= */
+/* Ao atingir o apogeu o voo é salvo em silêncio: só confirma o registro,
+   sem revelar posição nem classificação — isso só aparece no ranking. */
+function verificarRegistroApogeu() {
+  if (registroFeito || !arquivoCarregado || apogeuT == null || !USUARIO) return;
+  if (currentTime < apogeuT - 1e-9) return;
+
+  registroFeito = true;
+  registrarApogeu(apogeuT);
+
+  const r = markerDot ? markerDot.getBoundingClientRect() : null;
+  faiscas(20, r ? r.left + r.width / 2 : window.innerWidth / 2, r ? r.top : window.innerHeight / 3);
+  toast('★ Apogeu registrado — ' + USUARIO + ' · ' + apogeuT.toFixed(3) + ' s', 4000);
+}
+
+/* =================================================================
+   6. RENDER / CONTROLES
+================================================================= */
+function renderEventCard(idx) {
+  if (idx < 0) {
+    eventCard.className = 'card glass event-card idle';
+    eventCard.innerHTML = `<h2>Evento</h2><p class="idle-msg">Aguardando início do voo — dê play para começar.</p>`;
+    return;
+  }
+  const ev = EVENTOS[idx];
+  const isLast = idx === EVENTOS.length - 1;
+  eventCard.className = 'card glass event-card';
+  eventCard.innerHTML = `
+    <h2>Evento atual</h2>
+    <div class="event-name">${ev.id === 'APOGEE' ? '★ ' : ''}${ev.nome}<span class="event-time">t = ${ev.t.toFixed(3)}s</span></div>
+    <p class="explain">${ev.explicacao}</p>
+    <button class="btn-mystic" id="btnContinue">${isLast ? 'Reiniciar voo ↺' : 'Continuar voo →'}</button>
+  `;
+  document.getElementById('btnContinue').addEventListener('click', () => {
+    if (isLast) {
+      document.getElementById('btnRestart').click();
+      return;
+    }
+    playing = true;
+    lastFrameTs = null;
+    updatePlayButton();
+    requestAnimationFrame(tick);
+  });
+}
+
+function updatePlayButton() {
+  document.getElementById('btnPlay').textContent = playing ? '❚❚' : '▶';
+}
+
+function updateEventVisualStates() {
+  let algumRevelado = false;
+
+  EVENTOS.forEach((ev, i) => {
+    const g = eventTickEls[ev.id];
+    const li = eventListItems[ev.id];
+    if (!g || !li) return;
+    const isReached = currentTime >= ev.t - 1e-6;
+    if (isReached) algumRevelado = true;
+
+    // só aparece depois que o voo passa pelo evento
+    g.classList.toggle('revelado', isReached);
+    g.classList.toggle('reached', isReached);
+    li.classList.toggle('reached', isReached);
+    g.classList.toggle('current', i === currentEventIdx);
+    li.classList.toggle('current', i === currentEventIdx);
+  });
+
+  if (apogeuMarcaEl) {
+    apogeuMarcaEl.classList.toggle('revelado', apogeuT != null && currentTime >= apogeuT - 1e-6);
+  }
+  if (aguardandoEl) aguardandoEl.style.display = algumRevelado ? 'none' : '';
+}
+
+function render() {
+  const p = pointAtTime(currentTime);
+
+  const pts = PONTOS.filter(pt => pt.t <= currentTime).map(pt => `${sx(pt.dist)},${sy(pt.alt)}`);
+  pts.push(`${sx(p.dist)},${sy(p.alt)}`);
+  trajPath.setAttribute('points', pts.join(' '));
+
+  const px = sx(p.dist), py = sy(p.alt);
+  markerDot.setAttribute('cx', px);
+  markerDot.setAttribute('cy', py);
+  markerRing.setAttribute('cx', px);
+  markerRing.setAttribute('cy', py);
+  if (rocketGlyph) {
+    rocketGlyph.setAttribute('x', px);
+    rocketGlyph.setAttribute('y', py);
+  }
+
+  elAlt.textContent = p.alt.toFixed(1);
+  elDist.textContent = p.dist.toFixed(1);
+  elVel.textContent = p.vv.toFixed(1);
+  elAcc.textContent = p.av.toFixed(1);
+  clockDisplay.innerHTML = currentTime.toFixed(2) + '<span>s de voo</span>';
+
+  scrubber.value = Math.round((currentTime / TMAX) * 1000);
+  scrubTimeLabel.textContent = currentTime.toFixed(1) + 's';
+
+  updateEventVisualStates();
+  renderAltitudeTimeChart(currentTime);
+  verificarRegistroApogeu();
+}
+
+function seekToEvent(idx, pauseHere) {
+  playing = false;
+  updatePlayButton();
+  currentTime = EVENTOS[idx].t;
+  currentEventIdx = idx;
+  EVENTOS.forEach((ev, i) => { if (i <= idx) reachedIds.add(ev.id); });
+  render();
+  if (pauseHere) renderEventCard(idx);
+}
+
+function tick(ts) {
+  if (!playing) return;
+  if (lastFrameTs === null) lastFrameTs = ts;
+  const dt = (ts - lastFrameTs) / 1000;
+  lastFrameTs = ts;
+
+  const prevTime = currentTime;
+  currentTime = Math.min(TMAX, currentTime + dt * speed);
+
+  for (let i = 0; i < EVENTOS.length; i++) {
+    const ev = EVENTOS[i];
+    if (!reachedIds.has(ev.id) && prevTime < ev.t && currentTime >= ev.t) {
+      currentTime = ev.t;
+      reachedIds.add(ev.id);
+      currentEventIdx = i;
+      playing = false;
+      updatePlayButton();
+      render();
+      renderEventCard(i);
+      return;
+    }
+  }
+
+  render();
+
+  if (currentTime >= TMAX) {
+    playing = false;
+    updatePlayButton();
+    return;
+  }
+
+  requestAnimationFrame(tick);
+}
+
+document.getElementById('btnPlay').addEventListener('click', () => {
+  playing = !playing;
+  lastFrameTs = null;
+  updatePlayButton();
+  if (playing) requestAnimationFrame(tick);
+});
+
+document.getElementById('btnRestart').addEventListener('click', () => {
+  playing = false;
+  currentTime = 0;
+  currentEventIdx = -1;
+  reachedIds = new Set();
+  updatePlayButton();
+  render();
+  renderEventCard(-1);
+});
+
+document.getElementById('btnNextEvent').addEventListener('click', () => {
+  const next = EVENTOS.findIndex(ev => ev.t > currentTime + 1e-6);
+  if (next !== -1) seekToEvent(next, true);
+});
+
+document.getElementById('btnPrevEvent').addEventListener('click', () => {
+  let prev = -1;
+  for (let i = 0; i < EVENTOS.length; i++) if (EVENTOS[i].t < currentTime - 1e-6) prev = i;
+  if (prev !== -1) seekToEvent(prev, true); else if (EVENTOS.length) seekToEvent(0, true);
+});
+
+document.getElementById('speedGroup').addEventListener('click', (e) => {
+  const btn = e.target.closest('.speed-btn');
+  if (!btn) return;
+  speed = parseFloat(btn.dataset.speed);
+  document.querySelectorAll('.speed-btn').forEach(b => b.classList.toggle('active', b === btn));
+});
+
+scrubber.addEventListener('input', () => {
+  playing = false;
+  updatePlayButton();
+  currentTime = (scrubber.value / 1000) * TMAX;
+  reachedIds = new Set(EVENTOS.filter(ev => ev.t <= currentTime + 1e-6).map(ev => ev.id));
+  currentEventIdx = -1;
+  render();
+  renderEventCard(-1);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (rankingOverlay.classList.contains('show')) { fecharRanking(); return; }
+    if (confirmOverlay.classList.contains('show')) { fecharConfirm(false); return; }
+  }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (overlayAberto()) return;
+
+  if (e.code === 'Space') {
+    e.preventDefault();
+    document.getElementById('btnPlay').click();
+  } else if (e.code === 'ArrowRight') {
+    document.getElementById('btnNextEvent').click();
+  } else if (e.code === 'ArrowLeft') {
+    document.getElementById('btnPrevEvent').click();
+  } else if (e.key.toLowerCase() === 'r') {
+    document.getElementById('btnRestart').click();
+  }
+});
+
+/* ---------- início ---------- */
+buildChartsAndEvents();
+render();
+abrirPortalNome();
+</script>
+</body>
+</html>
